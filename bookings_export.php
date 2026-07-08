@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/booking_filters.php';
+require_once __DIR__ . '/includes/booking_status.php';
 
 $filters  = get_booking_filters();
 $whereSql = $filters['whereSql'];
@@ -57,7 +58,7 @@ fwrite($out, "\xEF\xBB\xBF");
 
 fputcsv($out, [
     'Ref Code', 'Customer', 'Customer Mobile', 'Rider', 'Rider Mobile',
-    'Pickup', 'Dropoff', 'Distance (km)', 'Payment', 'Type', 'Status',
+    'Pickup', 'Dropoff', 'Distance (km)', 'Payment', 'Type', 'Status', 'Status Description',
     'Date Created', 'Time Created', 'Created At',
 ]);
 
@@ -74,6 +75,7 @@ while ($row = $stmt->fetch()) {
         csv_safe($row['payment_type']),
         csv_safe($row['booking_type']),
         csv_safe($row['status']),
+        csv_safe(booking_status_label($row['status'])),
         csv_safe($row['date_created']),
         csv_safe($row['time_created']),
         csv_safe($row['created_at']),

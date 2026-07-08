@@ -93,7 +93,7 @@ if ($errorMsg === '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                      1, NOW(), NOW(), :wallet_id,
                      :ref_code, :description, :tran_type)"
             );
-            $insertStmt->bindValue(':type', 'cash_in');
+            $insertStmt->bindValue(':type', 'credit');
             $insertStmt->bindValue(':credit_amount', (float)$amount);
             $insertStmt->bindValue(':time_created', date('H:i:s'));
             $insertStmt->bindValue(':date_created', date('Y-m-d'));

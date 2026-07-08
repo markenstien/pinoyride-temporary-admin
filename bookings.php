@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/booking_filters.php';
+require_once __DIR__ . '/includes/booking_status.php';
 
 // ---------------------------------------------------------------
 // Read & sanitize filter inputs (GET, so results are bookmarkable)
@@ -130,7 +131,12 @@ require __DIR__ . '/includes/header.php';
       </div>
       <div class="col-md-2">
         <label class="form-label">Status</label>
-        <input type="number" name="status" class="form-control" placeholder="e.g. 1" value="<?= htmlspecialchars($status) ?>">
+        <select name="status" class="form-control">
+          <option value="">-- All --</option>
+          <?php foreach (BOOKING_STATUSES as $sVal => $sLabel): ?>
+            <option value="<?= $sVal ?>" <?= ((string)$sVal === $status) ? 'selected' : '' ?>><?= htmlspecialchars($sLabel) ?></option>
+          <?php endforeach; ?>
+        </select>
       </div>
       <div class="col-md-4">
         <label class="form-label">Ref Code</label>
@@ -213,7 +219,7 @@ require __DIR__ . '/includes/header.php';
             <td><?= htmlspecialchars($b['distance_km'] ?? '—') ?></td>
             <td><?= htmlspecialchars($b['payment_type'] ?? '—') ?></td>
             <td><?= htmlspecialchars($b['booking_type'] ?? '—') ?></td>
-            <td><span class="badge bg-info text-dark"><?= htmlspecialchars((string)$b['status']) ?></span></td>
+            <td><span class="badge <?= booking_status_badge_class($b['status']) ?>"><?= htmlspecialchars(booking_status_label($b['status'])) ?></span></td>
             <td><?= htmlspecialchars($b['date_created'] ?? '—') ?></td>
             <td><?= htmlspecialchars($b['time_created'] ?? '—') ?></td>
             <td>

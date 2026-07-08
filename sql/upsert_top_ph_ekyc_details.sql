@@ -127,8 +127,35 @@ ON CONFLICT (generate_request_user_id) DO UPDATE SET
   -- original KYC session id and creation timestamp.
 
 -- ---------------------------------------------------------------
--- 3. VERIFY: run after the UPSERT. Should return 0 rows
---    (i.e. no targeted rider is left missing a row, or out of sync).
+-- 3a. PREVIEW: mobile_no normalization for the synthetic rows this script
+--     creates (id_number LIKE '%DUM%'). mobile_no is copied straight from
+--     riders.mobile_no (63-prefixed, e.g. '639701470888'), but real eKYC
+--     provider rows use the local 0-prefixed 11-digit format
+--     (e.g. '09701470888') in mobile_no, keeping the 63-prefixed form only
+--     in pretty_mobile_no. Run this to review before the update below.
+-- ---------------------------------------------------------------
+SELECT
+  id,
+  generate_request_user_id,
+  mobile_no AS mobile_no_before,
+  '0' || substring(mobile_no from 3) AS mobile_no_after
+FROM public.top_ph_ekyc_details
+WHERE id_number LIKE '%DUM%'
+  AND mobile_no LIKE '63%';
+
+-- ---------------------------------------------------------------
+-- 3b. UPDATE: only run after reviewing the preview above.
+-- ---------------------------------------------------------------
+UPDATE public.top_ph_ekyc_details
+SET mobile_no = '0' || substring(mobile_no from 3),
+    updated_at = NOW()
+WHERE id_number LIKE '%DUM%'
+  AND mobile_no LIKE '63%';
+
+-- ---------------------------------------------------------------
+-- 4. VERIFY: run after both the UPSERT and the mobile_no UPDATE above.
+--    Should return 0 rows (i.e. no targeted rider is left missing a row,
+--    out of sync, or with an un-normalized mobile_no).
 -- ---------------------------------------------------------------
 SELECT
   r.id AS rider_id,
@@ -146,7 +173,7 @@ WHERE r.deleted_at IS NULL
     OR e.middle_name IS DISTINCT FROM r.middle_name
     OR e.last_name IS DISTINCT FROM r.last_name
     OR e.email_address IS DISTINCT FROM r.email_address
-    OR e.mobile_no IS DISTINCT FROM r.mobile_no
+    OR e.mobile_no IS DISTINCT FROM ('0' || substring(r.mobile_no from 3))
     OR e.pretty_mobile_no IS DISTINCT FROM r.mobile_no
     OR e.current_address IS DISTINCT FROM COALESCE(ra.address, 'ADMIN_MISSING_ADDRESS')
     OR e.permanent_address IS DISTINCT FROM COALESCE(ra.address, 'ADMIN_MISSING_ADDRESS')

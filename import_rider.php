@@ -109,6 +109,34 @@ function generate_dummy_license_no(): string
     return sprintf('DUM-34-%06d', random_int(0, 999999));
 }
 
+// Version-4 UUID for top_ph_ekyc_details.kyc_id (new rows only).
+function generate_uuid_v4(): string
+{
+    $data = random_bytes(16);
+    $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+    $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+    $hex = bin2hex($data);
+    return substr($hex, 0, 8) . '-' . substr($hex, 8, 4) . '-' . substr($hex, 12, 4)
+        . '-' . substr($hex, 16, 4) . '-' . substr($hex, 20, 12);
+}
+
+// wallet.ref_code is a unique, sequential 6-digit zero-padded code
+// (see sql/insert_rider_wallets.sql) — continue that same sequence here.
+function next_wallet_ref_seq(PDO $pdo): int
+{
+    $stmt = $pdo->query(
+        "SELECT COALESCE(MAX(ref_code::bigint), 0)
+         FROM public.wallet
+         WHERE ref_code ~ '^[0-9]+$'"
+    );
+    return (int)$stmt->fetchColumn() + 1;
+}
+
+function generate_wallet_ref_code(int $seq): string
+{
+    return sprintf('%06d', $seq);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm']) && $_POST['confirm'] === '1' && isset($_POST['payload'])) {
     // -----------------------------------------------------------
     // Step 3: ingest the previously previewed & confirmed rows

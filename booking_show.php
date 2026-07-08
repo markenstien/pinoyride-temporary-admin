@@ -2,10 +2,47 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/includes/booking_status.php';
 
-$id = (int)($_GET['id'] ?? 0);
+$id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $booking = null;
 $errorMsg = '';
+$statusUpdateErrorMsg = '';
+
+if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_status'])) {
+    $newStatus = (int)$_POST['new_status'];
+
+    if (!in_array($newStatus, BOOKING_STATUS_UPDATE_OPTIONS, true)) {
+        $statusUpdateErrorMsg = 'Invalid target status.';
+    } else {
+        try {
+            $pdo = get_pdo();
+
+            // Only move it if it's still in one of the in-progress statuses —
+            // re-checked here server-side so a stale page can't push an
+            // already-terminal booking (e.g. already Cancelled) to another state.
+            $updateStmt = $pdo->prepare(
+                "UPDATE public.booking
+                 SET status = :new_status,
+                     updated_at = NOW()
+                 WHERE id = :id
+                   AND status IN (0, 1, 2)"
+            );
+            $updateStmt->bindValue(':new_status', $newStatus, PDO::PARAM_INT);
+            $updateStmt->bindValue(':id', $id, PDO::PARAM_INT);
+            $updateStmt->execute();
+
+            if ($updateStmt->rowCount() === 0) {
+                $statusUpdateErrorMsg = 'Status was not updated — the booking may no longer be in an updatable state. Refresh and try again.';
+            } else {
+                header('Location: booking_show.php?id=' . $id . '&status_updated=1');
+                exit;
+            }
+        } catch (PDOException $e) {
+            $statusUpdateErrorMsg = 'Status update failed: ' . $e->getMessage();
+        }
+    }
+}
 
 if ($id <= 0) {
     $errorMsg = 'Invalid booking id.';
@@ -106,10 +143,36 @@ require __DIR__ . '/includes/header.php';
   <div class="alert alert-danger"><?= htmlspecialchars($errorMsg) ?></div>
 <?php else: ?>
 
+  <?php if (($_GET['status_updated'] ?? '') === '1'): ?>
+    <div class="alert alert-success">Booking status updated successfully.</div>
+  <?php endif; ?>
+  <?php if ($statusUpdateErrorMsg !== ''): ?>
+    <div class="alert alert-danger"><?= htmlspecialchars($statusUpdateErrorMsg) ?></div>
+  <?php endif; ?>
+
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="mb-0">Booking <?= val($booking['ref_code']) ?></h4>
-    <span class="badge bg-info text-dark fs-6">Status: <?= val($booking['status']) ?></span>
+    <span class="badge <?= booking_status_badge_class($booking['status']) ?> fs-6">Status: <?= htmlspecialchars(booking_status_label($booking['status'])) ?></span>
   </div>
+
+  <?php if (in_array((int)$booking['status'], BOOKING_STATUS_UPDATABLE_FROM, true)): ?>
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-semibold">Update Status</div>
+      <div class="card-body d-flex align-items-center gap-2">
+        <span class="text-muted">Mark this booking as:</span>
+        <?php foreach (BOOKING_STATUS_UPDATE_OPTIONS as $optStatus): ?>
+          <form method="post" class="d-inline"
+                onsubmit="return confirm('Mark this booking as <?= htmlspecialchars(booking_status_label($optStatus)) ?>?');">
+            <input type="hidden" name="id" value="<?= (int)$id ?>">
+            <input type="hidden" name="new_status" value="<?= $optStatus ?>">
+            <button type="submit" class="btn btn-sm <?= $optStatus === 3 ? 'btn-success' : 'btn-danger' ?>">
+              <?= htmlspecialchars(booking_status_label($optStatus)) ?>
+            </button>
+          </form>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  <?php endif; ?>
 
   <div class="row g-3">
 
@@ -121,7 +184,7 @@ require __DIR__ . '/includes/header.php';
           <table class="table table-sm mb-0">
             <tr><th style="width:40%">Ref Code</th><td><?= val($booking['ref_code']) ?></td></tr>
             <tr><th>Booking Type</th><td><?= val($booking['booking_type']) ?></td></tr>
-            <tr><th>Status</th><td><?= val($booking['status']) ?></td></tr>
+            <tr><th>Status</th><td><span class="badge <?= booking_status_badge_class($booking['status']) ?>"><?= htmlspecialchars(booking_status_label($booking['status'])) ?></span></td></tr>
             <tr><th>Payment Method</th><td><?= val($booking['payment_type']) ?></td></tr>
             <tr><th>Distance (km)</th><td><?= val($booking['distance_km']) ?></td></tr>
             <tr><th>Pickup Location</th><td><?= val($booking['pickup_location']) ?></td></tr>
@@ -197,7 +260,10 @@ require __DIR__ . '/includes/header.php';
         <div class="card-body">
           <?php if ($booking['rider_id']): ?>
             <table class="table table-sm mb-0">
-              <tr><th style="width:40%">Code</th><td><?= val($booking['rider_code']) ?></td></tr>
+              <tr>
+                <th style="width:40%">Code</th>
+                <td><a href="rider_show.php?id=<?= (int)$booking['rider_id'] ?>" class="btn btn-sm btn-outline-primary"><?= val($booking['rider_code']) ?></a></td>
+              </tr>
               <tr><th>Name</th>
                 <td><?= val(trim(($booking['rider_fname'] ?? '') . ' ' . ($booking['rider_mname'] ? $booking['rider_mname'] . ' ' : '') . ($booking['rider_lname'] ?? ''))) ?></td>
               </tr>
