@@ -12,6 +12,8 @@ $mobile   = trim($_GET['mobile'] ?? '');
 $fname    = trim($_GET['fname'] ?? '');
 $lname    = trim($_GET['lname'] ?? '');
 
+$isActive = $_GET['is_online'] ?? '';
+
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $perPage  = 100;
 $offset   = ($page - 1) * $perPage;
@@ -41,6 +43,11 @@ if ($fname !== '') {
 if ($lname !== '') {
     $where[] = 'last_name ILIKE :lname';
     $params[':lname'] = '%' . $lname . '%';
+}
+
+if($isActive !== '') {
+  $where[] = 'is_online = :is_online';
+  $params[':is_online'] = $isActive;
 }
 
 $whereSql = implode(' AND ', $where);
@@ -118,6 +125,15 @@ require __DIR__ . '/includes/header.php';
         <input type="text" name="lname" class="form-control" placeholder="Last name" value="<?= htmlspecialchars($lname) ?>">
       </div>
 
+      <div class="col-md-3">
+        <label class="form-label">Installed and Logged In</label>
+        <select name="is_online" id="" class="form-control">
+          <option value="">--Select</option>
+          <option value="1">Installed & Logged In</option>
+          <option value="0">Not Active</option>
+        </select>
+      </div>
+
       <div class="col-12 d-flex gap-2">
         <button type="submit" class="btn btn-primary">Search</button>
         <a href="riders.php" class="btn btn-outline-secondary">Reset</a>
@@ -132,7 +148,10 @@ require __DIR__ . '/includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-2">
   <span class="text-muted"><?= number_format($totalRows) ?> result<?= $totalRows === 1 ? '' : 's' ?> found</span>
-  <a href="import_rider.php" class="btn btn-sm btn-success">Import from CSV</a>
+  <div class="d-flex gap-2">
+    <a href="riders_export.php<?= build_query() ?>" class="btn btn-sm btn-outline-primary">Export CSV</a>
+    <a href="import_rider.php" class="btn btn-sm btn-success">Import from CSV</a>
+  </div>
 </div>
 
 <div class="table-responsive bg-white">

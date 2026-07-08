@@ -3,13 +3,39 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
-$id = (int)($_GET['id'] ?? 0);
+$id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $rider = null;
 $wallet = null;
 $errorMsg = '';
 $walletErrorMsg = '';
 $recentBookings = [];
 $bookingsErrorMsg = '';
+$vehicle = null;
+$vehicleErrorMsg = '';
+$address = null;
+$addressErrorMsg = '';
+
+if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_online'])) {
+    try {
+        $pdo = get_pdo();
+        $newOnline = ((int)$_POST['toggle_online'] === 1) ? 1 : 0;
+
+        $toggleStmt = $pdo->prepare(
+            "UPDATE public.riders
+             SET is_online = :is_online,
+                 updated_at = NOW()
+             WHERE id = :id"
+        );
+        $toggleStmt->bindValue(':is_online', $newOnline, PDO::PARAM_INT);
+        $toggleStmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $toggleStmt->execute();
+
+        header('Location: rider_show.php?id=' . $id . '&updated=1');
+        exit;
+    } catch (PDOException $e) {
+        $errorMsg = 'Update failed: ' . $e->getMessage();
+    }
+}
 
 if ($id <= 0) {
     $errorMsg = 'Invalid rider id.';
@@ -74,6 +100,39 @@ if ($id <= 0) {
         } catch (PDOException $e) {
             $bookingsErrorMsg = 'Bookings query failed: ' . $e->getMessage();
         }
+
+        try {
+            // deleted_at on this table isn't a reliable "is deleted" flag
+            // (import data has it stamped on every row), so just take the
+            // most recently created record for the rider.
+            $vehStmt = $pdo->prepare(
+                "SELECT v_type, v_brand, v_model, v_color, v_plate_number, v_or_cr_img, v_vehicle_img, status
+                 FROM public.rider_vehicle_details
+                 WHERE rider_id = :rider_id
+                 ORDER BY created_at DESC
+                 LIMIT 1"
+            );
+            $vehStmt->bindValue(':rider_id', $id, PDO::PARAM_INT);
+            $vehStmt->execute();
+            $vehicle = $vehStmt->fetch();
+        } catch (PDOException $e) {
+            $vehicleErrorMsg = 'Vehicle query failed: ' . $e->getMessage();
+        }
+
+        try {
+            $addrStmt = $pdo->prepare(
+                "SELECT type, address, barangay, municipality_city, province, zip_code
+                 FROM public.rider_address
+                 WHERE rider_id = :rider_id
+                 ORDER BY created_at DESC
+                 LIMIT 1"
+            );
+            $addrStmt->bindValue(':rider_id', $id, PDO::PARAM_INT);
+            $addrStmt->execute();
+            $address = $addrStmt->fetch();
+        } catch (PDOException $e) {
+            $addressErrorMsg = 'Address query failed: ' . $e->getMessage();
+        }
     }
 }
 
@@ -106,6 +165,11 @@ function badge_bool($v, string $onLabel = 'Yes', string $offLabel = 'No'): strin
 function fmt_money($v): string
 {
     return ($v === null || $v === '') ? '—' : '₱' . number_format((float)$v, 2);
+}
+
+function vehicle_type_label($v): string
+{
+    return ((int)$v === 1) ? 'Motorcycle' : 'Other';
 }
 
 $activeNav = 'riders';
@@ -187,7 +251,19 @@ require __DIR__ . '/includes/header.php';
             </tr>
             <tr><th>Application Status</th><td><?= val($rider['application_status']) ?></td></tr>
             <tr><th>Verified</th><td><?= badge_bool($rider['is_verified']) ?></td></tr>
-            <tr><th>Online</th><td><?= badge_bool($rider['is_online'], 'Online', 'Offline') ?></td></tr>
+            <tr>
+              <th>Online</th>
+              <td class="d-flex align-items-center gap-2">
+                <?= badge_bool($rider['is_online'], 'Online', 'Offline') ?>
+                <form method="post" class="d-inline">
+                  <input type="hidden" name="id" value="<?= (int)$id ?>">
+                  <input type="hidden" name="toggle_online" value="<?= ((int)$rider['is_online'] === 1) ? 0 : 1 ?>">
+                  <button type="submit" class="btn btn-sm <?= ((int)$rider['is_online'] === 1) ? 'btn-outline-secondary' : 'btn-outline-success' ?>">
+                    <?= ((int)$rider['is_online'] === 1) ? 'Set Offline' : 'Set Online' ?>
+                  </button>
+                </form>
+              </td>
+            </tr>
             <tr><th>Available</th><td><?= badge_bool($rider['is_available']) ?></td></tr>
           </table>
         </div>
@@ -205,6 +281,53 @@ require __DIR__ . '/includes/header.php';
             <tr><th>Updated At</th><td><?= fmt_dt($rider['updated_at'] ?? null) ?></td></tr>
             <tr><th>Deleted At</th><td><?= fmt_dt($rider['deleted_at'] ?? null) ?></td></tr>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vehicle details -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header bg-white fw-semibold">Vehicle Details</div>
+        <div class="card-body">
+          <?php if ($vehicleErrorMsg !== ''): ?>
+            <div class="alert alert-danger mb-0"><?= htmlspecialchars($vehicleErrorMsg) ?></div>
+          <?php elseif ($vehicle): ?>
+            <table class="table table-sm mb-0">
+              <tr><th style="width:40%">Type</th><td><?= val(vehicle_type_label($vehicle['v_type'])) ?></td></tr>
+              <tr><th>Brand</th><td><?= val($vehicle['v_brand']) ?></td></tr>
+              <tr><th>Model</th><td><?= val($vehicle['v_model']) ?></td></tr>
+              <tr><th>Color</th><td><?= val($vehicle['v_color']) ?></td></tr>
+              <tr><th>Plate Number</th><td><?= val($vehicle['v_plate_number']) ?></td></tr>
+              <tr><th>OR/CR Image</th><td><?= val($vehicle['v_or_cr_img']) ?></td></tr>
+              <tr><th>Vehicle Image</th><td><?= val($vehicle['v_vehicle_img']) ?></td></tr>
+            </table>
+          <?php else: ?>
+            <span class="text-muted">No vehicle details on file.</span>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+
+    <!-- Address details -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header bg-white fw-semibold">Address Details</div>
+        <div class="card-body">
+          <?php if ($addressErrorMsg !== ''): ?>
+            <div class="alert alert-danger mb-0"><?= htmlspecialchars($addressErrorMsg) ?></div>
+          <?php elseif ($address): ?>
+            <table class="table table-sm mb-0">
+              <tr><th style="width:40%">Type</th><td><?= val($address['type']) ?></td></tr>
+              <tr><th>Address</th><td><?= val($address['address']) ?></td></tr>
+              <tr><th>Barangay</th><td><?= val($address['barangay']) ?></td></tr>
+              <tr><th>City/Municipality</th><td><?= val($address['municipality_city']) ?></td></tr>
+              <tr><th>Province</th><td><?= val($address['province']) ?></td></tr>
+              <tr><th>Zip Code</th><td><?= val($address['zip_code']) ?></td></tr>
+            </table>
+          <?php else: ?>
+            <span class="text-muted">No address on file.</span>
+          <?php endif; ?>
         </div>
       </div>
     </div>
