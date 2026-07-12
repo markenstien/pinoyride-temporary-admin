@@ -84,6 +84,14 @@ function row_is_blank(array $mapped): bool
     return true;
 }
 
+function rider_exists_by_mobile(PDO $pdo, string $mobileNo): bool
+{
+    if ($mobileNo === '') return false;
+    $stmt = $pdo->prepare('SELECT 1 FROM public.riders WHERE mobile_no = :mobile_no LIMIT 1');
+    $stmt->execute([':mobile_no' => $mobileNo]);
+    return $stmt->fetchColumn() !== false;
+}
+
 // DRN-{YY}{MM}-{N}: YY/MM from the rider's own created_at (registration
 // month), N continues from the highest existing sequence number so far.
 function next_rider_code_seq(PDO $pdo): int
@@ -164,6 +172,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm']) && $_POST[
                 // "payload" field was tampered with between preview and submit.
                 [$driversLicenseImg] = cap_image_value((string)($row['drivers_license_img'] ?? ''));
                 [$vOrCrImg] = cap_image_value((string)($row['v_or_cr_img'] ?? ''));
+
+                $mobileNo = (string)($row['mobile_no'] ?? '');
+                if (rider_exists_by_mobile($pdo, $mobileNo)) {
+                    $results[] = ['row' => $i + 1, 'name' => $label, 'ok' => false, 'error' => 'Mobile number already exists — skipped'];
+                    continue;
+                }
 
                 $createdAt = $row['created_at'] ?? date('Y-m-d H:i:s');
                 $code      = generate_rider_code($createdAt, $nextSeq);
@@ -262,17 +276,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm']) && $_POST[
         if (!$handle) {
             $errorMsg = 'Could not read the uploaded file.';
         } else {
-            $lineNo = 0;
-            while (($line = fgetcsv($handle)) !== false) {
-                $lineNo++;
-                if ($lineNo === 1) continue; // header row
-                $mapped = map_row($line);
-                if (row_is_blank($mapped)) continue;
-                $rows[] = $mapped;
+            try {
+                $pdo = get_pdo();
+            } catch (Throwable $e) {
+                $errorMsg = 'Database connection failed.';
+            }
+
+            if ($errorMsg === '') {
+                $seenMobiles = [];
+                $lineNo = 0;
+                while (($line = fgetcsv($handle)) !== false) {
+                    $lineNo++;
+                    if ($lineNo === 1) continue; // header row
+                    $mapped = map_row($line);
+                    if (row_is_blank($mapped)) continue;
+
+                    if ($mapped['mobile_no'] !== '') {
+                        if (rider_exists_by_mobile($pdo, $mapped['mobile_no'])) {
+                            $mapped['issues'][] = 'Mobile number already exists in the database';
+                        } elseif (isset($seenMobiles[$mapped['mobile_no']])) {
+                            $mapped['issues'][] = 'Duplicate mobile number within this file';
+                        } else {
+                            $seenMobiles[$mapped['mobile_no']] = true;
+                        }
+                    }
+
+                    $rows[] = $mapped;
+                }
             }
             fclose($handle);
 
-            if (empty($rows)) {
+            if ($errorMsg === '' && empty($rows)) {
                 $errorMsg = 'No data rows found in the file.';
                 $mode = 'upload';
             }
