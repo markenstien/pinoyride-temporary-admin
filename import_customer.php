@@ -21,6 +21,28 @@ function normalize_timestamp(string $raw): array
     return [date('Y-m-d H:i:s', $ts), false];
 }
 
+// Normalize a mobile number to the canonical '63' + 10-digit format,
+// same rules as sql/normalize_rider_mobile_numbers.sql. Returns
+// [normalized_or_best_effort, recognized] — recognized = false means the
+// value didn't fit a known shape and was left as digits-only for review.
+function normalize_mobile_to_63(string $raw): array
+{
+    $digits = preg_replace('/\D/', '', $raw) ?? '';
+    if ($digits === '') {
+        return ['', true];
+    }
+    if (preg_match('/^63\d{10}$/', $digits)) {
+        return [$digits, true];
+    }
+    if (preg_match('/^0\d{10}$/', $digits)) {
+        return ['63' . substr($digits, 1), true];
+    }
+    if (preg_match('/^9\d{9}$/', $digits)) {
+        return ['63' . $digits, true];
+    }
+    return [$digits, false];
+}
+
 function random_chars(int $length): string
 {
     $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -31,32 +53,68 @@ function random_chars(int $length): string
     return $out;
 }
 
-function generate_customer_code(): string
+// referral_code: 10 chars, uppercase letters + digits (e.g. 'IJVGCQC08P').
+function generate_referral_code(): string
 {
-    return sprintf('%06d', random_int(0, 999999));
+    $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    $out = '';
+    for ($i = 0; $i < 10; $i++) {
+        $out .= $chars[random_int(0, strlen($chars) - 1)];
+    }
+    return $out;
+}
+
+// CUST-{YY}{MM}-{N}: YY/MM from the customer's own created_at (registration
+// month), N continues from the highest existing sequence number so far —
+// same pattern as riders' DRN-{YY}{MM}-{N} code.
+function next_customer_code_seq(PDO $pdo): int
+{
+    $stmt = $pdo->query(
+        "SELECT COALESCE(MAX(NULLIF(regexp_replace(split_part(code, '-', 3), '\\D', '', 'g'), '')::int), 0)
+         FROM public.customer
+         WHERE code LIKE 'CUST-%'"
+    );
+    return (int)$stmt->fetchColumn() + 1;
+}
+
+function generate_customer_code(string $createdAt, int $seq): string
+{
+    $ts = strtotime($createdAt) ?: time();
+    return sprintf('CUST-%s%s-%d', date('y', $ts), date('m', $ts), $seq);
+}
+
+function customer_exists_by_mobile(PDO $pdo, string $mobile): bool
+{
+    if ($mobile === '') return false;
+    $stmt = $pdo->prepare('SELECT 1 FROM public.customer WHERE mobile = :mobile LIMIT 1');
+    $stmt->execute([':mobile' => $mobile]);
+    return $stmt->fetchColumn() !== false;
 }
 
 function map_row(array $r): array
 {
     [$createdAt, $createdAtGuessed] = normalize_timestamp($r[0] ?? '');
+    [$mobileNo, $mobileRecognized] = normalize_mobile_to_63(trim($r[8] ?? ''));
 
     $mapped = [
         'created_at'         => $createdAt,
         'created_at_guessed' => $createdAtGuessed,
         'first_name'         => trim($r[2] ?? ''),
         'last_name'          => trim($r[3] ?? ''),
-        'bdate'              => trim($r[4] ?? ''),
-        'age'                => trim($r[5] ?? ''),
+        'mobile_no'          => $mobileNo,
+        'mobile_recognized'  => $mobileRecognized,
         'gender'             => trim($r[6] ?? ''),
-        'address'            => trim($r[7] ?? ''),
-        'mobile_number'      => trim($r[8] ?? ''),
-        'govid'              => trim($r[9] ?? ''),
+        'permanent_address'  => trim($r[7] ?? ''),
     ];
 
     $issues = [];
     if ($mapped['first_name'] === '') $issues[] = 'Missing first name';
     if ($mapped['last_name'] === '') $issues[] = 'Missing last name';
-    if ($mapped['mobile_number'] === '') $issues[] = 'Missing mobile number';
+    if ($mapped['mobile_no'] === '') {
+        $issues[] = 'Missing mobile number';
+    } elseif (!$mapped['mobile_recognized']) {
+        $issues[] = 'Mobile number format not recognized — stored as digits-only, please review';
+    }
     if ($mapped['created_at_guessed']) $issues[] = 'Timestamp missing/unparsable — using current time';
     $mapped['issues'] = $issues;
 
@@ -65,7 +123,7 @@ function map_row(array $r): array
 
 function row_is_blank(array $mapped): bool
 {
-    foreach (['first_name', 'last_name', 'mobile_number', 'address', 'govid'] as $k) {
+    foreach (['first_name', 'last_name', 'mobile_no', 'gender', 'permanent_address'] as $k) {
         if ($mapped[$k] !== '') return false;
     }
     return true;
@@ -88,61 +146,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm']) && $_POST[
         }
 
         if ($errorMsg === '') {
+            $nextSeq = next_customer_code_seq($pdo);
+
             foreach ($decoded as $i => $row) {
                 $label = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
                 if ($label === '') $label = '(row ' . ($i + 1) . ')';
 
-                $mobileNumber       = (string)($row['mobile_number'] ?? '');
-                $ekycRequestUserId  = $mobileNumber . random_chars(8);
+                $mobileNo = (string)($row['mobile_no'] ?? '');
+                if (customer_exists_by_mobile($pdo, $mobileNo)) {
+                    $results[] = ['row' => $i + 1, 'name' => $label, 'ok' => false, 'error' => 'Mobile number already exists — skipped'];
+                    continue;
+                }
+
+                $createdAt         = $row['created_at'] ?? date('Y-m-d H:i:s');
+                $code              = generate_customer_code($createdAt, $nextSeq);
+                $referralCode      = generate_referral_code();
+                $ekycRequestUserId = $mobileNo . '-' . $code;
 
                 try {
                     $pdo->beginTransaction();
 
-                    // Assumption: real columns are fname/lname/mobile (per index.php's
-                    // working query) rather than firstname/lastname/mobile_number.
+                    // customer_type/status/is_verified/is_success_kyc are literal
+                    // constants (not bound) so Postgres can coerce them into
+                    // customer_type's varchar(6) column the same way the original
+                    // import script did.
                     $custStmt = $pdo->prepare(
                         "INSERT INTO public.customer
-                            (code, fname, lname, bdate, age, gender, mobile, govid, ekyc_request_user_id,
-                             customer_type, status, is_verified, is_success_kyc, created_at, updated_at)
+                            (code, fname, lname, mobile, customer_type, status, login_type,
+                             is_verified, is_success_kyc, referral_code, ekyc_request_user_id,
+                             updated_by, created_at, updated_at)
                          VALUES
-                            (:code, :fname, :lname, :bdate, :age, :gender, :mobile, :govid, :ekyc_request_user_id,
-                             1, 1, 0, 1, NOW(), NOW())
+                            (:code, :fname, :lname, :mobile, 1, 1, :login_type,
+                             0, 1, :referral_code, :ekyc_request_user_id,
+                             :updated_by, :created_at, :updated_at)
                          RETURNING id"
                     );
                     $custStmt->execute([
-                        ':code'                  => generate_customer_code(),
-                        ':fname'                 => $row['first_name'] ?? '',
-                        ':lname'                 => $row['last_name'] ?? '',
-                        ':bdate'                 => ($row['bdate'] ?? '') !== '' ? $row['bdate'] : null,
-                        ':age'                   => ($row['age'] ?? '') !== '' ? (int)$row['age'] : null,
-                        ':gender'                => $row['gender'] ?? '',
-                        ':mobile'                => $mobileNumber,
-                        ':govid'                 => $row['govid'] ?? '',
-                        ':ekyc_request_user_id'  => $ekycRequestUserId,
+                        ':code'                 => $code,
+                        ':fname'                => $row['first_name'] ?? '',
+                        ':lname'                => $row['last_name'] ?? '',
+                        ':mobile'               => $mobileNo,
+                        ':login_type'           => 'mobile_number',
+                        ':referral_code'        => $referralCode,
+                        ':ekyc_request_user_id' => $ekycRequestUserId,
+                        ':updated_by'           => 1,
+                        ':created_at'           => $createdAt,
+                        ':updated_at'           => $createdAt,
                     ]);
                     $customerId = (int)$custStmt->fetchColumn();
 
                     $kycStmt = $pdo->prepare(
                         "INSERT INTO public.top_ph_ekyc_details
-                            (kyc_id, first_name, last_name, date_of_birth, gender, current_address, mobile_no,
-                             status, generate_request_user_id, created_at, updated_at)
+                            (kyc_id, first_name, last_name, gender, mobile_no, pretty_mobile_no,
+                             permanent_address, status, generate_request_user_id, created_at, updated_at)
                          VALUES
-                            (:kyc_id, :first_name, :last_name, :date_of_birth, :gender, :current_address, :mobile_no,
-                             0, :generate_request_user_id, NOW(), NOW())"
+                            (:kyc_id, :first_name, :last_name, :gender, :mobile_no, :pretty_mobile_no,
+                             :permanent_address, 0, :generate_request_user_id, :created_at, :updated_at)"
                     );
                     $kycStmt->execute([
-                        ':kyc_id'                    => random_chars(12),
-                        ':first_name'                => $row['first_name'] ?? '',
-                        ':last_name'                 => $row['last_name'] ?? '',
-                        ':date_of_birth'              => $row['bdate'] ?? '',
-                        ':gender'                    => $row['gender'] ?? '',
-                        ':current_address'           => $row['address'] ?? '',
-                        ':mobile_no'                 => $mobileNumber,
-                        ':generate_request_user_id'  => $ekycRequestUserId,
+                        ':kyc_id'                   => random_chars(12),
+                        ':first_name'               => $row['first_name'] ?? '',
+                        ':last_name'                => $row['last_name'] ?? '',
+                        ':gender'                   => $row['gender'] ?? '',
+                        ':mobile_no'                => $mobileNo,
+                        ':pretty_mobile_no'         => $mobileNo,
+                        ':permanent_address'        => $row['permanent_address'] ?? '',
+                        ':generate_request_user_id' => $ekycRequestUserId,
+                        ':created_at'               => $createdAt,
+                        ':updated_at'               => $createdAt,
                     ]);
 
                     $pdo->commit();
-                    $results[] = ['row' => $i + 1, 'name' => $label, 'ok' => true, 'customer_id' => $customerId, 'ekyc_id' => $ekycRequestUserId];
+                    $nextSeq++;
+                    $results[] = ['row' => $i + 1, 'name' => $label, 'ok' => true, 'customer_id' => $customerId, 'code' => $code];
                 } catch (PDOException $e) {
                     if ($pdo->inTransaction()) $pdo->rollBack();
                     $results[] = ['row' => $i + 1, 'name' => $label, 'ok' => false, 'error' => $e->getMessage()];
@@ -166,17 +242,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm']) && $_POST[
         if (!$handle) {
             $errorMsg = 'Could not read the uploaded file.';
         } else {
-            $lineNo = 0;
-            while (($line = fgetcsv($handle)) !== false) {
-                $lineNo++;
-                if ($lineNo === 1) continue; // header row
-                $mapped = map_row($line);
-                if (row_is_blank($mapped)) continue;
-                $rows[] = $mapped;
+            try {
+                $pdo = get_pdo();
+            } catch (Throwable $e) {
+                $errorMsg = 'Database connection failed.';
+            }
+
+            if ($errorMsg === '') {
+                $seenMobiles = [];
+                $lineNo = 0;
+                while (($line = fgetcsv($handle)) !== false) {
+                    $lineNo++;
+                    if ($lineNo === 1) continue; // header row
+                    $mapped = map_row($line);
+                    if (row_is_blank($mapped)) continue;
+
+                    if ($mapped['mobile_no'] !== '') {
+                        if (customer_exists_by_mobile($pdo, $mapped['mobile_no'])) {
+                            $mapped['issues'][] = 'Mobile number already exists in the database';
+                        } elseif (isset($seenMobiles[$mapped['mobile_no']])) {
+                            $mapped['issues'][] = 'Duplicate mobile number within this file';
+                        } else {
+                            $seenMobiles[$mapped['mobile_no']] = true;
+                        }
+                    }
+
+                    $rows[] = $mapped;
+                }
             }
             fclose($handle);
 
-            if (empty($rows)) {
+            if ($errorMsg === '' && empty($rows)) {
                 $errorMsg = 'No data rows found in the file.';
                 $mode = 'upload';
             }
@@ -209,8 +305,8 @@ require __DIR__ . '/includes/header.php';
     <div class="card-body">
       <p class="text-muted">
         Upload a CSV export of the customer registration sheet. Expected columns (0-indexed):
-        Timestamp[0], First Name[2], Last Name[3], Birth Date[4], Age[5], Gender[6], Address[7],
-        Mobile Number[8], Government ID[9].
+        Timestamp[0], First Name[2], Last Name[3], Gender[6], Permanent Address[7], Mobile Number[8].
+        Mobile numbers are normalized to the '63' + 10-digit format automatically.
       </p>
       <form method="post" enctype="multipart/form-data" class="row g-3">
         <div class="col-md-8">
@@ -238,12 +334,9 @@ require __DIR__ . '/includes/header.php';
           <th>Created At</th>
           <th>First Name</th>
           <th>Last Name</th>
-          <th>Birth Date</th>
-          <th>Age</th>
           <th>Gender</th>
-          <th>Address</th>
           <th>Mobile</th>
-          <th>Gov ID</th>
+          <th>Permanent Address</th>
           <th>Check</th>
         </tr>
       </thead>
@@ -254,12 +347,9 @@ require __DIR__ . '/includes/header.php';
             <td><?= val($r['created_at']) ?></td>
             <td><?= val($r['first_name']) ?></td>
             <td><?= val($r['last_name']) ?></td>
-            <td><?= val($r['bdate']) ?></td>
-            <td><?= val($r['age']) ?></td>
             <td><?= val($r['gender']) ?></td>
-            <td class="text-truncate" style="max-width:150px" title="<?= htmlspecialchars($r['address']) ?>"><?= val($r['address']) ?></td>
-            <td><?= val($r['mobile_number']) ?></td>
-            <td class="text-truncate" style="max-width:150px" title="<?= htmlspecialchars($r['govid']) ?>"><?= val($r['govid']) ?></td>
+            <td><?= val($r['mobile_no']) ?></td>
+            <td class="text-truncate" style="max-width:150px" title="<?= htmlspecialchars($r['permanent_address']) ?>"><?= val($r['permanent_address']) ?></td>
             <td>
               <?php if (empty($r['issues'])): ?>
                 <span class="badge bg-success">OK</span>
@@ -308,6 +398,7 @@ require __DIR__ . '/includes/header.php';
         <tr>
           <th>#</th>
           <th>Name</th>
+          <th>Code</th>
           <th>Result</th>
           <th>Details</th>
         </tr>
@@ -317,6 +408,7 @@ require __DIR__ . '/includes/header.php';
           <tr>
             <td><?= $r['row'] ?></td>
             <td><?= htmlspecialchars($r['name']) ?></td>
+            <td><?= htmlspecialchars($r['code'] ?? '—') ?></td>
             <td>
               <?php if ($r['ok']): ?>
                 <span class="badge bg-success">Success</span>
