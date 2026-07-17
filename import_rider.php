@@ -26,6 +26,28 @@ function interpret_vehicle_type(string $raw): int
     return (stripos(trim($raw), 'motorcycle') !== false) ? 1 : 2;
 }
 
+// Normalize a mobile number to the canonical '63' + 10-digit format,
+// same rules as sql/normalize_rider_mobile_numbers.sql. Returns
+// [normalized_or_best_effort, recognized] — recognized = false means the
+// value didn't fit a known shape and was left as digits-only for review.
+function normalize_mobile_to_63(string $raw): array
+{
+    $digits = preg_replace('/\D/', '', $raw) ?? '';
+    if ($digits === '') {
+        return ['', true];
+    }
+    if (preg_match('/^63\d{10}$/', $digits)) {
+        return [$digits, true];
+    }
+    if (preg_match('/^0\d{10}$/', $digits)) {
+        return ['63' . substr($digits, 1), true];
+    }
+    if (preg_match('/^9\d{9}$/', $digits)) {
+        return ['63' . $digits, true];
+    }
+    return [$digits, false];
+}
+
 // Image cells (license/OR-CR) are expected to be short filenames/paths.
 // Anything past 100 chars is treated as bad data (e.g. a pasted data URI
 // or an oversized URL) rather than a real image reference.
@@ -45,6 +67,7 @@ function map_row(array $r): array
     $vTypeRaw = trim($r[7] ?? '');
     [$driversLicenseImg, $licenseImgCapped] = cap_image_value(trim($r[13] ?? ''));
     [$vOrCrImg, $orCrImgCapped] = cap_image_value(trim($r[12] ?? ''));
+    [$mobileNo, $mobileRecognized] = normalize_mobile_to_63(trim($r[16] ?? ''));
 
     $mapped = [
         'created_at'          => $createdAt,
@@ -52,7 +75,8 @@ function map_row(array $r): array
         'first_name'          => trim($r[2] ?? ''),
         'last_name'           => trim($r[3] ?? ''),
         'drivers_license_img' => $driversLicenseImg,
-        'mobile_no'           => trim($r[16] ?? ''),
+        'mobile_no'           => $mobileNo,
+        'mobile_recognized'   => $mobileRecognized,
         'email_address'       => trim($r[19] ?? ''),
         'v_type_raw'          => $vTypeRaw,
         'v_type'              => interpret_vehicle_type($vTypeRaw),
@@ -67,7 +91,11 @@ function map_row(array $r): array
     $issues = [];
     if ($mapped['first_name'] === '') $issues[] = 'Missing first name';
     if ($mapped['last_name'] === '') $issues[] = 'Missing last name';
-    if ($mapped['mobile_no'] === '') $issues[] = 'Missing mobile number';
+    if ($mapped['mobile_no'] === '') {
+        $issues[] = 'Missing mobile number';
+    } elseif (!$mapped['mobile_recognized']) {
+        $issues[] = 'Mobile number format not recognized — stored as digits-only, please review';
+    }
     if ($mapped['created_at_guessed']) $issues[] = 'Timestamp missing/unparsable — using current time';
     if ($licenseImgCapped) $issues[] = "Driver's license image value over " . IMG_MAX_LEN . ' chars — replaced with invalid.jpg';
     if ($orCrImgCapped) $issues[] = 'OR/CR image value over ' . IMG_MAX_LEN . ' chars — replaced with invalid.jpg';
