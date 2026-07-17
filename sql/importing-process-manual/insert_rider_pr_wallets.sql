@@ -51,7 +51,7 @@ INSERT INTO public.wallet (
   status, created_at, updated_at
 )
 SELECT
-  lpad(r.id::text, 6, '0'),
+  TO_CHAR(FLOOR(RANDOM() * 1000000)::int, 'FM000000'),
   r.id,
   'rider',
   'pr-user-wallet',
@@ -66,7 +66,7 @@ WHERE r.deleted_at IS NULL
       AND w.user_type = 'rider'
       AND w.type = 'pr-user-wallet'
       AND w.deleted_at IS NULL
-  );
+  ) order by r.id desc;
 
 -- ---------------------------------------------------------------
 -- 3. VERIFY: run after the INSERT. Should return 0 rows
