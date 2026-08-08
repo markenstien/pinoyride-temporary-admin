@@ -143,6 +143,9 @@ require __DIR__ . '/includes/header.php';
   <div class="alert alert-danger"><?= htmlspecialchars($errorMsg) ?></div>
 <?php else: ?>
 
+  <?php if (($_GET['created'] ?? '') === '1'): ?>
+    <div class="alert alert-success">Booking created successfully.</div>
+  <?php endif; ?>
   <?php if (($_GET['status_updated'] ?? '') === '1'): ?>
     <div class="alert alert-success">Booking status updated successfully.</div>
   <?php endif; ?>
