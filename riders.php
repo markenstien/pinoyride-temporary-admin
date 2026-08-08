@@ -149,6 +149,7 @@ require __DIR__ . '/includes/header.php';
 <div class="d-flex justify-content-between align-items-center mb-2">
   <span class="text-muted"><?= number_format($totalRows) ?> result<?= $totalRows === 1 ? '' : 's' ?> found</span>
   <div class="d-flex gap-2">
+    <a href="riders_credit.php" class="btn btn-sm btn-outline-success">Driver Credit</a>
     <a href="riders_export.php<?= build_query() ?>" class="btn btn-sm btn-outline-primary">Export CSV</a>
     <a href="import_rider.php" class="btn btn-sm btn-success">Import from CSV</a>
   </div>

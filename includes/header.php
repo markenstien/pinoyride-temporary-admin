@@ -21,8 +21,9 @@
     <span class="navbar-brand">RiderApp Admin</span>
     <div class="d-flex gap-2">
       <a href="index.php" class="btn btn-sm <?= $activeNav === 'customers' ? 'btn-light' : 'btn-outline-light' ?>">Customers</a>
-      <a href="riders.php" class="btn btn-sm <?= $activeNav === 'riders' ? 'btn-light' : 'btn-outline-light' ?>">Riders</a>
+      <a href="riders.php" class="btn btn-sm <?= $activeNav === 'riders' ? 'btn-light' : 'btn-outline-light' ?>">Drivers</a>
       <a href="bookings.php" class="btn btn-sm <?= $activeNav === 'bookings' ? 'btn-light' : 'btn-outline-light' ?>">Bookings</a>
+      <a href="commission.php" class="btn btn-sm <?= $activeNav === 'commission' ? 'btn-light' : 'btn-outline-light' ?>">Commission</a>
     </div>
   </div>
 </nav>
