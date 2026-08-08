@@ -195,9 +195,12 @@ require __DIR__ . '/includes/header.php';
     <h4 class="mb-0">
       <?= val(trim(($rider['first_name'] ?? '') . ' ' . ($rider['middle_name'] ? $rider['middle_name'] . ' ' : '') . ($rider['last_name'] ?? ''))) ?>
     </h4>
-    <span class="badge <?= ((int)$rider['status'] === 1) ? 'badge-status-1' : 'badge-status-0' ?> fs-6">
-      <?= ((int)$rider['status'] === 1) ? 'Active' : 'Inactive' ?>
-    </span>
+    <div class="d-flex align-items-center gap-2">
+      <a href="rider_edit.php?id=<?= (int)$id ?>" class="btn btn-sm btn-outline-primary">Edit</a>
+      <span class="badge <?= ((int)$rider['status'] === 1) ? 'badge-status-1' : 'badge-status-0' ?> fs-6">
+        <?= ((int)$rider['status'] === 1) ? 'Active' : 'Inactive' ?>
+      </span>
+    </div>
   </div>
 
   <div class="row g-3">

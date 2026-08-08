@@ -191,6 +191,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm']) && $_POST[
 
         if ($errorMsg === '') {
             $nextSeq = next_rider_code_seq($pdo);
+            // Both wallet rows created per rider (pr-user-wallet + user-wallet)
+            // draw from this same counter, incremented after each insert, so
+            // ref_codes stay unique across the whole batch.
+            $nextWalletSeq = next_wallet_ref_seq($pdo);
 
             foreach ($decoded as $i => $row) {
                 $label = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
@@ -209,19 +213,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm']) && $_POST[
 
                 $createdAt = $row['created_at'] ?? date('Y-m-d H:i:s');
                 $code      = generate_rider_code($createdAt, $nextSeq);
+                $driversLicenseNo  = generate_dummy_license_no();
+                $ekycRequestUserId = $mobileNo . '-' . $code;
 
                 try {
                     $pdo->beginTransaction();
 
                     $riderStmt = $pdo->prepare(
                         "INSERT INTO public.riders
-                            (code, first_name, last_name, drivers_license_img, drivers_license_no, 
+                            (code, first_name, last_name, drivers_license_img, drivers_license_no,
                             mobile_no, email_address, created_at, updated_at, updated_by,
-                            is_verified, auto_accept, is_available, is_online, is_success_kyc, status,application_status)
+                            is_verified, auto_accept, is_available, is_online, is_success_kyc, status,application_status,
+                            ekyc_request_user_id)
                          VALUES
-                            (:code, :first_name, :last_name, :drivers_license_img, :drivers_license_no, 
+                            (:code, :first_name, :last_name, :drivers_license_img, :drivers_license_no,
                             :mobile_no, :email_address, :created_at, :updated_at, :updated_by,
-                            :is_verified, :auto_accept, :is_available, :is_online, :is_success_kyc, :status, :application_status)
+                            :is_verified, :auto_accept, :is_available, :is_online, :is_success_kyc, :status, :application_status,
+                            :ekyc_request_user_id)
                          RETURNING id"
                     );
                     $riderStmt->execute([
@@ -229,7 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm']) && $_POST[
                         ':first_name'          => $row['first_name'] ?? '',
                         ':last_name'           => $row['last_name'] ?? '',
                         ':drivers_license_img' => $driversLicenseImg,
-                        ':drivers_license_no'  => generate_dummy_license_no(),
+                        ':drivers_license_no'  => $driversLicenseNo,
                         ':mobile_no'           => $row['mobile_no'] ?? '',
                         ':email_address'       => ($row['email_address'] ?? '') !== '' ? $row['email_address'] : null,
                         ':created_at'          => $createdAt,
@@ -240,9 +248,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm']) && $_POST[
                         ':auto_accept'         => 1,
                         ':is_available'         => 1,
                         ':is_online' => 0,
-                        ':is_success_kyc' => 0,
+                        ':is_success_kyc' => 1,
                         ':status'              => 1,
-                        ':application_status'  => 1
+                        ':application_status'  => 1,
+                        ':ekyc_request_user_id' => $ekycRequestUserId,
                     ]);
                     $riderId = (int)$riderStmt->fetchColumn();
 
@@ -277,6 +286,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm']) && $_POST[
                         ':updated_at'   => $createdAt,
                         ':deleted_at'   => $createdAt,
                     ]);
+
+                    // -- eKYC detail row (was upsert_top_ph_ekyc_details.sql) --
+                    $riderAddress = ($row['address'] ?? '') !== '' ? $row['address'] : 'ADMIN_MISSING_ADDRESS';
+                    // top_ph_ekyc_details.mobile_no uses the local 0-prefixed
+                    // format; pretty_mobile_no keeps the 63-prefixed form —
+                    // same split real eKYC provider rows use.
+                    $mobileNoLocal = '0' . substr($mobileNo, 2);
+
+                    $ekycStmt = $pdo->prepare(
+                        "INSERT INTO public.top_ph_ekyc_details
+                            (kyc_id, first_name, middle_name, last_name, email_address, mobile_no, pretty_mobile_no,
+                             date_of_birth, place_of_birth, nationality, gender,
+                             current_country, current_address, permanent_country, permanent_address,
+                             nature_of_work, source_of_fund, id_type, id_number,
+                             status, created_at, updated_at, generate_request_user_id)
+                         VALUES
+                            (:kyc_id, :first_name, :middle_name, :last_name, :email_address, :mobile_no, :pretty_mobile_no,
+                             :date_of_birth, :place_of_birth, :nationality, :gender,
+                             :current_country, :current_address, :permanent_country, :permanent_address,
+                             :nature_of_work, :source_of_fund, :id_type, :id_number,
+                             :status, :created_at, :updated_at, :generate_request_user_id)"
+                    );
+                    $ekycStmt->execute([
+                        ':kyc_id'                   => generate_uuid_v4(),
+                        ':first_name'               => $row['first_name'] ?? '',
+                        ':middle_name'              => null,
+                        ':last_name'                => $row['last_name'] ?? '',
+                        ':email_address'            => ($row['email_address'] ?? '') !== '' ? $row['email_address'] : null,
+                        ':mobile_no'                => $mobileNoLocal,
+                        ':pretty_mobile_no'         => $mobileNo,
+                        ':date_of_birth'            => '01/01/1991',
+                        ':place_of_birth'           => 'SYSTEM_AUTOMATIC',
+                        ':nationality'              => 'Filipino',
+                        ':gender'                   => 'Male',
+                        ':current_country'          => 'Philippines',
+                        ':current_address'          => $riderAddress,
+                        ':permanent_country'        => 'Philippines',
+                        ':permanent_address'        => $riderAddress,
+                        ':nature_of_work'           => 'SYSTEM_AUTOMATIC',
+                        ':source_of_fund'           => 'Others',
+                        ':id_type'                  => '630000004',
+                        ':id_number'                => $driversLicenseNo,
+                        ':status'                   => 0,
+                        ':created_at'               => $createdAt,
+                        ':updated_at'               => $createdAt,
+                        ':generate_request_user_id' => $ekycRequestUserId,
+                    ]);
+
+                    // -- Wallets (was insert_rider_pr_wallets.sql / insert_rider_wallets.sql) --
+                    $walletStmt = $pdo->prepare(
+                        "INSERT INTO public.wallet
+                            (ref_code, user_id, user_type, type, avail_balance, credit_amount, debit_amount, status, created_at, updated_at)
+                         VALUES
+                            (:ref_code, :user_id, :user_type, :type, 0, 0, 0, 0, :created_at, :updated_at)"
+                    );
+                    foreach (['pr-user-wallet', 'user-wallet'] as $walletType) {
+                        $walletStmt->execute([
+                            ':ref_code'   => generate_wallet_ref_code($nextWalletSeq),
+                            ':user_id'    => $riderId,
+                            ':user_type'  => 'rider',
+                            ':type'       => $walletType,
+                            ':created_at' => $createdAt,
+                            ':updated_at' => $createdAt,
+                        ]);
+                        $nextWalletSeq++;
+                    }
 
                     $pdo->commit();
                     $nextSeq++;
@@ -442,6 +517,8 @@ require __DIR__ . '/includes/header.php';
   <div class="alert alert-info">
     Rows highlighted in yellow have a warning (hover the ⚠ badge for details) but can still be ingested —
     review them carefully first. Vehicle Type badge: <strong>1</strong> = Motorcycle, <strong>2</strong> = Other.
+    Each row creates a <code>riders</code> row plus its vehicle, address, eKYC detail, and both wallet
+    (pr-user-wallet / user-wallet) rows in one step — no manual SQL follow-up needed after ingesting.
   </div>
 
   <form method="post">

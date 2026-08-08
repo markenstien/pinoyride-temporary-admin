@@ -106,14 +106,20 @@ require __DIR__ . '/includes/header.php';
   <?php if (($_GET['created'] ?? '') === '1'): ?>
     <div class="alert alert-success">Customer created successfully.</div>
   <?php endif; ?>
+  <?php if (($_GET['updated'] ?? '') === '1'): ?>
+    <div class="alert alert-success">Customer updated successfully.</div>
+  <?php endif; ?>
 
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="mb-0">
       <?= val(trim(($customer['fname'] ?? '') . ' ' . ($customer['mname'] ? $customer['mname'] . ' ' : '') . ($customer['lname'] ?? ''))) ?>
     </h4>
-    <span class="badge <?= ((int)$customer['status'] === 1) ? 'badge-status-1' : 'badge-status-0' ?> fs-6">
-      <?= ((int)$customer['status'] === 1) ? 'Active' : 'Inactive' ?>
-    </span>
+    <div class="d-flex align-items-center gap-2">
+      <a href="customer_edit.php?id=<?= (int)$id ?>" class="btn btn-sm btn-outline-primary">Edit</a>
+      <span class="badge <?= ((int)$customer['status'] === 1) ? 'badge-status-1' : 'badge-status-0' ?> fs-6">
+        <?= ((int)$customer['status'] === 1) ? 'Active' : 'Inactive' ?>
+      </span>
+    </div>
   </div>
 
   <div class="row g-3">
