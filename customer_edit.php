@@ -76,6 +76,14 @@ if ($errorMsg === '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($formErrors)) {
+        $riderDupStmt = $pdo->prepare('SELECT 1 FROM public.riders WHERE mobile_no = :mobile LIMIT 1');
+        $riderDupStmt->execute([':mobile' => $mobileNo]);
+        if ($riderDupStmt->fetchColumn() !== false) {
+            $formErrors[] = 'This mobile number is already registered to a driver.';
+        }
+    }
+
+    if (empty($formErrors)) {
         try {
             $pdo->beginTransaction();
 

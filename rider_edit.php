@@ -148,6 +148,14 @@ if ($errorMsg === '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($formErrors)) {
+        $custDupStmt = $pdo->prepare('SELECT 1 FROM public.customer WHERE mobile = :mobile_no LIMIT 1');
+        $custDupStmt->execute([':mobile_no' => $mobileNo]);
+        if ($custDupStmt->fetchColumn() !== false) {
+            $formErrors[] = 'This mobile number is already registered to a customer.';
+        }
+    }
+
+    if (empty($formErrors)) {
         try {
             $pdo->beginTransaction();
 
