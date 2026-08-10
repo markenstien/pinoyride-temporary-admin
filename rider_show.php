@@ -212,19 +212,10 @@ require __DIR__ . '/includes/header.php';
         <div class="card-body">
           <table class="table table-sm mb-0">
             <tr><th style="width:40%">Code</th><td><?= val($rider['code']) ?></td></tr>
+            <tr><th>User Key</th><td><?= val($rider['ekyc_request_user_id']) ?></td></tr>
             <tr><th>First Name</th><td><?= val($rider['first_name']) ?></td></tr>
             <tr><th>Middle Name</th><td><?= val($rider['middle_name']) ?></td></tr>
-            <tr><th>Last Name</th><td><?= val($rider['last_name']) ?></td></tr>
-            <tr><th>Mobile</th><td><?= val($rider['mobile_no']) ?></td></tr>
-            <tr><th>Email</th><td><?= val($rider['email_address']) ?></td></tr>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- License info -->
-    <div class="col-lg-6">
-      <div class="card h-100">
+            <tr><th>Last Name</th><td><?= val($rider['last_name']) ?></td></tryou 
         <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
           License Info
           <a href="rider_edit.php?id=<?= (int)$id ?>" class="btn btn-sm btn-outline-primary">Edit</a>

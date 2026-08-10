@@ -17,6 +17,7 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_status
     } else {
         try {
             $pdo = get_pdo();
+            $pdo->beginTransaction();
 
             // Only move it if it's still in one of the in-progress statuses —
             // re-checked here server-side so a stale page can't push an
@@ -26,19 +27,92 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_status
                  SET status = :new_status,
                      updated_at = NOW()
                  WHERE id = :id
-                   AND status IN (0, 1, 2)"
+                   AND status IN (0, 1, 2)
+                 RETURNING rider_id, ref_code"
             );
             $updateStmt->bindValue(':new_status', $newStatus, PDO::PARAM_INT);
             $updateStmt->bindValue(':id', $id, PDO::PARAM_INT);
             $updateStmt->execute();
+            $updated = $updateStmt->fetch();
 
-            if ($updateStmt->rowCount() === 0) {
+            if (!$updated) {
+                $pdo->rollBack();
                 $statusUpdateErrorMsg = 'Status was not updated — the booking may no longer be in an updatable state. Refresh and try again.';
             } else {
+                // Completing a cash trip debits the driver's wallet for the
+                // platform commission — mirrors what the rider/customer app
+                // already does on a normal completion (see wallet_history
+                // rows for e.g. bookings 521/522: type=debit, tran_type=
+                // booking, description="Debit|Ref-<ref_code>"). This admin
+                // "Complete Trip" action used to skip this step entirely, so
+                // commission never got charged when a trip was completed here.
+                if ($newStatus === 3 && $updated['rider_id']) {
+                    $payStmt = $pdo->prepare(
+                        "SELECT commission FROM public.booking_payment WHERE booking_id = :id AND type = 'cash' LIMIT 1"
+                    );
+                    $payStmt->execute([':id' => $id]);
+                    $commission = $payStmt->fetchColumn();
+
+                    if ($commission !== false && $commission !== null && (float)$commission > 0) {
+                        $riderId = (int)$updated['rider_id'];
+
+                        $walletStmt = $pdo->prepare(
+                            "SELECT id FROM public.wallet
+                             WHERE user_id = :rider_id AND user_type = 'rider' AND type = 'user-wallet'
+                             LIMIT 1"
+                        );
+                        $walletStmt->execute([':rider_id' => $riderId]);
+                        $walletId = $walletStmt->fetchColumn();
+
+                        if ($walletId === false) {
+                            $walletRefCode = 'WL-' . strtoupper(bin2hex(random_bytes(5)));
+                            $createWalletStmt = $pdo->prepare(
+                                "INSERT INTO public.wallet
+                                    (ref_code, user_id, user_type, type, avail_balance, credit_amount, debit_amount, status, created_at, updated_at)
+                                 VALUES
+                                    (:ref_code, :user_id, 'rider', 'user-wallet', 0, 0, 0, 1, NOW(), NOW())
+                                 RETURNING id"
+                            );
+                            $createWalletStmt->bindValue(':ref_code', $walletRefCode);
+                            $createWalletStmt->bindValue(':user_id', $riderId, PDO::PARAM_INT);
+                            $createWalletStmt->execute();
+                            $walletId = (int)$createWalletStmt->fetchColumn();
+                        }
+
+                        $debitStmt = $pdo->prepare(
+                            "UPDATE public.wallet
+                             SET avail_balance = avail_balance - :amount,
+                                 debit_amount = debit_amount + :amount,
+                                 updated_at = NOW()
+                             WHERE id = :wallet_id"
+                        );
+                        $debitStmt->execute([':amount' => (float)$commission, ':wallet_id' => $walletId]);
+
+                        $historyStmt = $pdo->prepare(
+                            "INSERT INTO public.wallet_history
+                                (type, credit_amount, debit_amount, time_created, date_created,
+                                 status, created_at, updated_at, wallet_id, description, booking_id, tran_type)
+                             VALUES
+                                ('debit', 0, :amount, :time_created, :date_created,
+                                 0, NOW(), NOW(), :wallet_id, :description, :booking_id, 'booking')"
+                        );
+                        $historyStmt->execute([
+                            ':amount'       => (float)$commission,
+                            ':time_created' => date('h:i A'),
+                            ':date_created' => date('Y-m-d'),
+                            ':wallet_id'    => $walletId,
+                            ':description'  => 'Debit|Ref-' . $updated['ref_code'],
+                            ':booking_id'   => (string)$id,
+                        ]);
+                    }
+                }
+
+                $pdo->commit();
                 header('Location: booking_show.php?id=' . $id . '&status_updated=1');
                 exit;
             }
         } catch (PDOException $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
             $statusUpdateErrorMsg = 'Status update failed: ' . $e->getMessage();
         }
     }

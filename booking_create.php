@@ -85,6 +85,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'confirm
         $passengerFirstName = trim($_POST['passenger_first_name'] ?? '');
         $passengerLastName  = trim($_POST['passenger_last_name'] ?? '');
 
+        // Re-checked here (not just at preview) in case the number was
+        // registered as a driver in the gap between preview and confirm.
+        $passengerMobileIsRider = false;
+        if ($passengerMode === 'new' && $passengerMobile !== '') {
+            $riderConflictStmt = $pdo->prepare('SELECT 1 FROM public.riders WHERE mobile_no = :mobile AND deleted_at IS NULL LIMIT 1');
+            $riderConflictStmt->execute([':mobile' => $passengerMobile]);
+            $passengerMobileIsRider = $riderConflictStmt->fetchColumn() !== false;
+        }
+
         if (!$rider) {
             $errorMsg = 'Driver no longer exists — please start over.';
         } elseif ($pickupLat === 0.0 || $pickupLng === 0.0 || $dropoffLat === 0.0 || $dropoffLng === 0.0) {
@@ -95,6 +104,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'confirm
             $errorMsg = 'Missing passenger details — please start over.';
         } elseif ($passengerMode === 'existing' && $passengerId <= 0) {
             $errorMsg = 'Missing passenger details — please start over.';
+        } elseif ($passengerMobileIsRider) {
+            $errorMsg = 'This mobile number is already registered to a driver — please start over.';
         } else {
             try {
                 $pdo->beginTransaction();
@@ -265,6 +276,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'confirm
                 [$passengerFirstName, $passengerLastName] = split_name($passengerName);
                 if ($passengerFirstName === '' || $passengerLastName === '') {
                     $formErrors[] = 'This mobile number has no existing passenger — enter the passenger\'s full name (first and last) to register them.';
+                }
+                // A new passenger can't be registered on a mobile number that's
+                // already a driver's — customer_edit.php/rider_edit.php both
+                // enforce mobile numbers being unique across the two roles, so
+                // letting one slip in here would break that invariant later.
+                $riderConflictStmt = $pdo->prepare('SELECT 1 FROM public.riders WHERE mobile_no = :mobile AND deleted_at IS NULL LIMIT 1');
+                $riderConflictStmt->execute([':mobile' => $passengerMobile]);
+                if ($riderConflictStmt->fetchColumn() !== false) {
+                    $formErrors[] = 'This mobile number is already registered to a driver — a new passenger can\'t be created with it.';
                 }
             }
 

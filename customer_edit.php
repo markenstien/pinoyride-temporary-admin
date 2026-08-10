@@ -105,14 +105,19 @@ if ($errorMsg === '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($ekyc) {
                 $ekycUpdStmt = $pdo->prepare(
                     "UPDATE public.top_ph_ekyc_details
-                     SET first_name = :first_name, last_name = :last_name,
+                     SET first_name = :first_name, middle_name = :middle_name, last_name = :last_name,
+                         email_address = :email_address, mobile_no = :mobile_no, pretty_mobile_no = :pretty_mobile_no,
                          gender = :gender, permanent_address = :permanent_address,
                          updated_at = NOW()
                      WHERE generate_request_user_id = :req_id"
                 );
                 $ekycUpdStmt->execute([
                     ':first_name'        => $firstName,
+                    ':middle_name'       => $middleName !== '' ? $middleName : null,
                     ':last_name'         => $lastName,
+                    ':email_address'     => $email !== '' ? $email : null,
+                    ':mobile_no'         => $mobileNo,
+                    ':pretty_mobile_no'  => $mobileNo,
                     ':gender'            => $gender,
                     ':permanent_address' => $address,
                     ':req_id'            => $customer['ekyc_request_user_id'],

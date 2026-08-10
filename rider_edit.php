@@ -33,6 +33,7 @@ $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $rider = null;
 $vehicle = null;
 $address = null;
+$ekyc = null;
 $errorMsg = '';
 $formErrors = [];
 
@@ -50,6 +51,17 @@ if ($id <= 0) {
         if (!$rider) {
             $errorMsg = 'Rider not found.';
         } else {
+            if (!empty($rider['ekyc_request_user_id'])) {
+                $ekycStmt = $pdo->prepare(
+                    "SELECT * FROM public.top_ph_ekyc_details
+                     WHERE generate_request_user_id = :req_id AND deleted_at IS NULL
+                     ORDER BY created_at DESC LIMIT 1"
+                );
+                $ekycStmt->bindValue(':req_id', $rider['ekyc_request_user_id']);
+                $ekycStmt->execute();
+                $ekyc = $ekycStmt->fetch();
+            }
+
             $vehStmt = $pdo->prepare(
                 "SELECT id, v_type, v_brand, v_model, v_color, v_plate_number
                  FROM public.rider_vehicle_details
@@ -240,6 +252,28 @@ if ($errorMsg === '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':municipality_city'  => $municipalityCity,
                     ':province'           => $province,
                     ':zip_code'           => $zipCode,
+                ]);
+            }
+
+            if ($ekyc) {
+                $ekycUpdStmt = $pdo->prepare(
+                    "UPDATE public.top_ph_ekyc_details
+                     SET first_name = :first_name, middle_name = :middle_name, last_name = :last_name,
+                         email_address = :email_address, mobile_no = :mobile_no, pretty_mobile_no = :pretty_mobile_no,
+                         current_address = :current_address, permanent_address = :permanent_address,
+                         updated_at = NOW()
+                     WHERE generate_request_user_id = :req_id"
+                );
+                $ekycUpdStmt->execute([
+                    ':first_name'        => $firstName,
+                    ':middle_name'       => $middleName !== '' ? $middleName : null,
+                    ':last_name'         => $lastName,
+                    ':email_address'     => $email !== '' ? $email : null,
+                    ':mobile_no'         => $mobileNo,
+                    ':pretty_mobile_no'  => $mobileNo,
+                    ':current_address'   => $addrLine,
+                    ':permanent_address' => $addrLine,
+                    ':req_id'            => $rider['ekyc_request_user_id'],
                 ]);
             }
 
