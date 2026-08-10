@@ -109,14 +109,22 @@ function validate_customer_fields(string $firstName, string $lastName, string $m
 // equivalent array with the same keys) and must have a non-empty mobile_no.
 // Returns ['customer_id' => int, 'code' => string]. Throws PDOException on
 // failure (transaction is rolled back before rethrowing).
-function insert_customer_record(PDO $pdo, array $mapped, string $createdAt, int $seq): array
+//
+// $manageTransaction: pass false when the caller already has an open
+// transaction of its own (e.g. booking_create.php wrapping a new-passenger
+// insert together with the booking/payment inserts) — PDO doesn't support
+// nested transactions, so a second beginTransaction() would throw "There is
+// already an active transaction". In that case the caller owns commit/rollback.
+function insert_customer_record(PDO $pdo, array $mapped, string $createdAt, int $seq, bool $manageTransaction = true): array
 {
     $code              = generate_customer_code($createdAt, $seq);
     $referralCode      = generate_referral_code();
     $ekycRequestUserId = $mapped['mobile_no'] . '-' . $code;
 
     try {
-        $pdo->beginTransaction();
+        if ($manageTransaction) {
+            $pdo->beginTransaction();
+        }
 
         // customer_type/status/is_verified/is_success_kyc are literal
         // constants (not bound) so Postgres can coerce them into
@@ -168,9 +176,11 @@ function insert_customer_record(PDO $pdo, array $mapped, string $createdAt, int 
             ':updated_at'               => $createdAt,
         ]);
 
-        $pdo->commit();
+        if ($manageTransaction) {
+            $pdo->commit();
+        }
     } catch (PDOException $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($manageTransaction && $pdo->inTransaction()) $pdo->rollBack();
         throw $e;
     }
 
