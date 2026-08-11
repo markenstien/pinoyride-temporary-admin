@@ -122,9 +122,37 @@ function vehicle_type_label($v): string
     return ((int)$v === 1) ? 'Motorcycle' : 'Other';
 }
 
+// Mobile number and vehicle details are sensitive — rendered blurred/masked
+// by default and only swapped in from data-value on click (see toggleSensitive()
+// in the inline script below). Value is already in the page, so no AJAX
+// round-trip is needed to reveal it.
+function sensitive_span(string $value, string $mask): string
+{
+    if ($value === '') {
+        return '<span class="text-muted">—</span>';
+    }
+
+    return '<span class="sensitive-field" data-value="' . htmlspecialchars($value) . '" data-mask="' . htmlspecialchars($mask) . '" onclick="toggleSensitive(this)" title="Click to reveal">'
+         . htmlspecialchars($mask) . '</span>';
+}
+
 $activeNav = 'nearby_drivers';
 require __DIR__ . '/includes/header.php';
 ?>
+
+<style>
+  .sensitive-field {
+    cursor: pointer;
+    filter: blur(4px);
+    transition: filter 0.15s ease;
+    user-select: none;
+    display: inline-block;
+  }
+  .sensitive-field.revealed {
+    filter: none;
+    user-select: text;
+  }
+</style>
 
 <h4 class="mb-3">Nearby Active Drivers</h4>
 
@@ -197,18 +225,20 @@ require __DIR__ . '/includes/header.php';
               </td>
               <td><?= val($r['code']) ?></td>
               <td><?= val(trim($r['first_name'] . ' ' . ($r['middle_name'] ? $r['middle_name'] . ' ' : '') . $r['last_name'])) ?></td>
-              <td><?= val($r['mobile_no']) ?></td>
-              <td>
-                <?php if ($r['vehicle']): ?>
-                  <?= val(vehicle_type_label($r['vehicle']['v_type'])) ?> &mdash;
-                  <?= val(trim($r['vehicle']['v_brand'] . ' ' . $r['vehicle']['v_model'])) ?>
-                  <?php if ($r['vehicle']['v_plate_number']): ?>
-                    (<?= val($r['vehicle']['v_plate_number']) ?>)
-                  <?php endif; ?>
-                <?php else: ?>
-                  <span class="text-muted">—</span>
-                <?php endif; ?>
-              </td>
+              <td><?php
+                $mobile = (string)($r['mobile_no'] ?? '');
+                echo sensitive_span($mobile, $mobile === '' ? '' : str_repeat('•', max(8, strlen($mobile))));
+              ?></td>
+              <td><?php
+                $vehText = '';
+                if ($r['vehicle']) {
+                    $vehText = vehicle_type_label($r['vehicle']['v_type']) . ' — ' . trim($r['vehicle']['v_brand'] . ' ' . $r['vehicle']['v_model']);
+                    if ($r['vehicle']['v_plate_number']) {
+                        $vehText .= ' (' . $r['vehicle']['v_plate_number'] . ')';
+                    }
+                }
+                echo sensitive_span($vehText, 'Vehicle details — click to reveal');
+              ?></td>
               <td>
                 <?= ((int)$r['is_online'] === 1 && (int)$r['is_login'] === 1)
                       ? '<span class="badge bg-success">Online</span>'
@@ -238,5 +268,13 @@ require __DIR__ . '/includes/header.php';
 <?php else: ?>
   <div class="text-muted">Enter a pickup address above to find nearby active drivers.</div>
 <?php endif; ?>
+
+<script>
+function toggleSensitive(el) {
+  var revealed = el.classList.toggle('revealed');
+  el.textContent = revealed ? el.dataset.value : el.dataset.mask;
+  el.title = revealed ? 'Click to hide' : 'Click to reveal';
+}
+</script>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>
