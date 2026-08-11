@@ -237,7 +237,7 @@ require __DIR__ . '/includes/header.php';
           <span class="text-muted small"><?= number_format(count($dailyRows)) ?> day<?= count($dailyRows) === 1 ? '' : 's' ?></span>
         </div>
         <div class="table-responsive">
-          <table class="table table-striped table-hover align-middle mb-0">
+          <table class="table table-striped table-hover align-middle mb-0 dataTable">
             <thead>
               <tr>
                 <th>Date</th>
@@ -282,7 +282,7 @@ require __DIR__ . '/includes/header.php';
       <div class="card h-100">
         <div class="card-header bg-white fw-semibold">Top Riders by Commission</div>
         <div class="table-responsive">
-          <table class="table table-striped table-hover align-middle mb-0">
+          <table class="table table-striped table-hover align-middle mb-0 dataTable">
             <thead>
               <tr>
                 <th>Rider</th>

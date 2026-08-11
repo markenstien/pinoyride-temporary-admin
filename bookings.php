@@ -173,7 +173,7 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <div class="table-responsive bg-white">
-  <table class="table table-striped table-hover align-middle mb-0">
+  <table class="table table-striped table-hover align-middle mb-0 dataTable" data-paging="false">
     <thead>
       <tr>
         <th>Ref Code</th>

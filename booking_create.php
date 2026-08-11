@@ -25,6 +25,13 @@ $errorMsg   = '';
 $formErrors = [];
 $preview    = null;
 
+// Prefill for links in from elsewhere (e.g. nearby_drivers.php's "Book This
+// Rider" button, which passes the driver's mobile and the searched pickup
+// address). Only used on the initial GET load — once the form is POSTed,
+// $_POST values take over via the same field names below.
+$prefillDriverMobile = trim($_GET['driver_mobile'] ?? '');
+$prefillPickupAddress = trim($_GET['pickup_address'] ?? '');
+
 function split_name(string $name): array
 {
     $name = trim(preg_replace('/\s+/', ' ', $name) ?? '');
@@ -431,7 +438,7 @@ require __DIR__ . '/includes/header.php';
             <div class="col-12 mt-4"><h6 class="text-muted mb-0">Driver</h6></div>
             <div class="col-md-6">
               <label class="form-label">Mobile Number *</label>
-              <input type="text" name="driver_mobile" class="form-control" placeholder="09xxxxxxxxx" value="<?= htmlspecialchars($_POST['driver_mobile'] ?? '') ?>" required>
+              <input type="text" name="driver_mobile" class="form-control" placeholder="09xxxxxxxxx" value="<?= htmlspecialchars($_POST['driver_mobile'] ?? $prefillDriverMobile) ?>" required>
               <div class="form-text">Must already be a registered driver.</div>
             </div>
             <div class="col-md-6">
@@ -446,7 +453,7 @@ require __DIR__ . '/includes/header.php';
             <div class="col-12 mt-4"><h6 class="text-muted mb-0">Booking Details</h6></div>
             <div class="col-12">
               <label class="form-label">Pickup Address *</label>
-              <input type="text" name="pickup_address" class="form-control" value="<?= htmlspecialchars($_POST['pickup_address'] ?? '') ?>" required>
+              <input type="text" name="pickup_address" class="form-control" value="<?= htmlspecialchars($_POST['pickup_address'] ?? $prefillPickupAddress) ?>" required>
             </div>
             <div class="col-12">
               <label class="form-label">Dropoff Address *</label>

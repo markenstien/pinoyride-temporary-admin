@@ -3,13 +3,35 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
-$id = (int)($_GET['id'] ?? 0);
+$id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $customer = null;
 $errorMsg = '';
 $recentBookings = [];
 $bookingsErrorMsg = '';
 $ekyc = null;
 $ekycErrorMsg = '';
+
+if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_login'])) {
+    try {
+        $pdo = get_pdo();
+        $newLogin = ((int)$_POST['toggle_login'] === 1) ? 1 : 0;
+
+        $toggleStmt = $pdo->prepare(
+            "UPDATE public.customer
+             SET is_login = :is_login,
+                 updated_at = NOW()
+             WHERE id = :id"
+        );
+        $toggleStmt->bindValue(':is_login', $newLogin, PDO::PARAM_INT);
+        $toggleStmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $toggleStmt->execute();
+
+        header('Location: customer_show.php?id=' . $id . '&updated=1');
+        exit;
+    } catch (PDOException $e) {
+        $errorMsg = 'Update failed: ' . $e->getMessage();
+    }
+}
 
 if ($id <= 0) {
     $errorMsg = 'Invalid customer id.';
@@ -160,6 +182,21 @@ require __DIR__ . '/includes/header.php';
                 <?= ((int)$customer['is_verified'] === 1)
                       ? '<span class="badge bg-success">Yes</span>'
                       : '<span class="badge bg-secondary">No</span>' ?>
+              </td>
+            </tr>
+            <tr>
+              <th>Login Status</th>
+              <td class="d-flex align-items-center gap-2">
+                <?= ((int)$customer['is_login'] === 1)
+                      ? '<span class="badge bg-success">Logged In</span>'
+                      : '<span class="badge bg-secondary">Logged Out</span>' ?>
+                <form method="post" class="d-inline">
+                  <input type="hidden" name="id" value="<?= (int)$id ?>">
+                  <input type="hidden" name="toggle_login" value="<?= ((int)$customer['is_login'] === 1) ? 0 : 1 ?>">
+                  <button type="submit" class="btn btn-sm <?= ((int)$customer['is_login'] === 1) ? 'btn-outline-secondary' : 'btn-outline-success' ?>">
+                    <?= ((int)$customer['is_login'] === 1) ? 'Force Logout' : 'Force Login' ?>
+                  </button>
+                </form>
               </td>
             </tr>
           </table>

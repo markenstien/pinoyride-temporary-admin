@@ -37,6 +37,28 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_onl
     }
 }
 
+if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_login'])) {
+    try {
+        $pdo = get_pdo();
+        $newLogin = ((int)$_POST['toggle_login'] === 1) ? 1 : 0;
+
+        $toggleStmt = $pdo->prepare(
+            "UPDATE public.riders
+             SET is_login = :is_login,
+                 updated_at = NOW()
+             WHERE id = :id"
+        );
+        $toggleStmt->bindValue(':is_login', $newLogin, PDO::PARAM_INT);
+        $toggleStmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $toggleStmt->execute();
+
+        header('Location: rider_show.php?id=' . $id . '&updated=1');
+        exit;
+    } catch (PDOException $e) {
+        $errorMsg = 'Update failed: ' . $e->getMessage();
+    }
+}
+
 if ($id <= 0) {
     $errorMsg = 'Invalid rider id.';
 } else {
@@ -215,7 +237,17 @@ require __DIR__ . '/includes/header.php';
             <tr><th>User Key</th><td><?= val($rider['ekyc_request_user_id']) ?></td></tr>
             <tr><th>First Name</th><td><?= val($rider['first_name']) ?></td></tr>
             <tr><th>Middle Name</th><td><?= val($rider['middle_name']) ?></td></tr>
-            <tr><th>Last Name</th><td><?= val($rider['last_name']) ?></td></tryou 
+            <tr><th>Last Name</th><td><?= val($rider['last_name']) ?></td></tr>
+            <tr><th>Mobile</th><td><?= val($rider['mobile_no']) ?></td></tr>
+            <tr><th>Email</th><td><?= val($rider['email_address']) ?></td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- License info -->
+    <div class="col-lg-6">
+      <div class="card h-100">
         <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
           License Info
           <a href="rider_edit.php?id=<?= (int)$id ?>" class="btn btn-sm btn-outline-primary">Edit</a>
@@ -259,6 +291,19 @@ require __DIR__ . '/includes/header.php';
               </td>
             </tr>
             <tr><th>Available</th><td><?= badge_bool($rider['is_available']) ?></td></tr>
+            <tr>
+              <th>Login Status</th>
+              <td class="d-flex align-items-center gap-2">
+                <?= badge_bool($rider['is_login'], 'Logged In', 'Logged Out') ?>
+                <form method="post" class="d-inline">
+                  <input type="hidden" name="id" value="<?= (int)$id ?>">
+                  <input type="hidden" name="toggle_login" value="<?= ((int)$rider['is_login'] === 1) ? 0 : 1 ?>">
+                  <button type="submit" class="btn btn-sm <?= ((int)$rider['is_login'] === 1) ? 'btn-outline-secondary' : 'btn-outline-success' ?>">
+                    <?= ((int)$rider['is_login'] === 1) ? 'Force Logout' : 'Force Login' ?>
+                  </button>
+                </form>
+              </td>
+            </tr>
           </table>
         </div>
       </div>
