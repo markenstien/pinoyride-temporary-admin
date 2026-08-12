@@ -13,7 +13,7 @@
   .table thead th { white-space: nowrap; background: #eef1f5; }
   .badge-status-1 { background-color: #198754; }
   .badge-status-0 { background-color: #6c757d; }
-  .table-responsive { border-radius: .5rem; overflow: hidden; }
+  .table-responsive { border-radius: .5rem; overflow-x: auto; }
 </style>
 </head>
 <body>

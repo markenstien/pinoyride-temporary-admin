@@ -21,7 +21,7 @@ $customerId = $filters['customerId'];
 $riderId    = $filters['riderId'];
 
 $page     = max(1, (int)($_GET['page'] ?? 1));
-$perPage  = 100;
+$perPage  = 20;
 $offset   = ($page - 1) * $perPage;
 
 $bookings   = [];
@@ -166,7 +166,9 @@ require __DIR__ . '/includes/header.php';
 <div class="d-flex justify-content-between align-items-center mb-2">
   <span class="text-muted"><?= number_format($totalRows) ?> result<?= $totalRows === 1 ? '' : 's' ?> found</span>
   <div class="d-flex gap-2">
+    <a href="booking_check_fare.php" class="btn btn-sm btn-primary">Check Fare</a>
     <a href="booking_create.php" class="btn btn-sm btn-primary">New Booking</a>
+    <a href="post_booking_create.php" class="btn btn-sm btn-outline-primary">Post Booking</a>
     <a href="booking_analysis.php" class="btn btn-sm btn-outline-secondary">Booking Analysis</a>
     <a href="bookings_export.php?<?= htmlspecialchars(http_build_query($_GET), ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-success">Export CSV</a>
   </div>
