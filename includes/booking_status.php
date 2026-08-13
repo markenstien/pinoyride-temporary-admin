@@ -35,3 +35,17 @@ function booking_status_badge_class($status): string
         default: return 'bg-dark';
     }
 }
+
+// Single source of truth for booking.booking_type meaning.
+const BOOKING_TYPES = [
+    1 => 'MC Taxi',
+    2 => '4 Seaters',
+    3 => '6 Seaters',
+];
+
+function booking_type_label($type): string
+{
+    if ($type === null || $type === '') return '—';
+    $type = (int)$type;
+    return BOOKING_TYPES[$type] ?? ('Unknown (' . $type . ')');
+}

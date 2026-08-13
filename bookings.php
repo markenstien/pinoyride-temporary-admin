@@ -221,7 +221,7 @@ require __DIR__ . '/includes/header.php';
             <td><?= htmlspecialchars($b['dropoff_location'] ?? '—') ?></td>
             <td><?= htmlspecialchars($b['distance_km'] ?? '—') ?></td>
             <td><?= htmlspecialchars($b['payment_type'] ?? '—') ?></td>
-            <td><?= htmlspecialchars($b['booking_type'] ?? '—') ?></td>
+            <td><?= htmlspecialchars(booking_type_label($b['booking_type'])) ?></td>
             <td><span class="badge <?= booking_status_badge_class($b['status']) ?>"><?= htmlspecialchars(booking_status_label($b['status'])) ?></span></td>
             <td><?= htmlspecialchars($b['date_created'] ?? '—') ?></td>
             <td><?= htmlspecialchars($b['time_created'] ?? '—') ?></td>

@@ -284,7 +284,12 @@ require __DIR__ . '/includes/header.php';
 
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="mb-0">Booking <?= val($booking['ref_code']) ?></h4>
-    <span class="badge <?= booking_status_badge_class($booking['status']) ?> fs-6">Status: <?= htmlspecialchars(booking_status_label($booking['status'])) ?></span>
+    <div class="d-flex align-items-center gap-2">
+      <?php if (in_array((int)$booking['status'], BOOKING_STATUS_UPDATABLE_FROM, true) && $booking['rider_id']): ?>
+        <a href="booking_live.php?id=<?= (int)$id ?>" class="btn btn-sm btn-outline-primary">Track Live Location</a>
+      <?php endif; ?>
+      <span class="badge <?= booking_status_badge_class($booking['status']) ?> fs-6">Status: <?= htmlspecialchars(booking_status_label($booking['status'])) ?></span>
+    </div>
   </div>
 
   <?php if (in_array((int)$booking['status'], BOOKING_STATUS_UPDATABLE_FROM, true)): ?>
