@@ -510,6 +510,15 @@ require __DIR__ . '/includes/header.php';
                 <?php endif; ?>
               </td>
             </tr>
+            <tr>
+              <th>Fare</th>
+              <td>
+                <?= fmt_money($preview['fare']['total_amount']) ?>
+                <span class="badge <?= $preview['fare']['fare_source'] === 'manual' ? 'bg-primary' : 'bg-secondary' ?>">
+                  <?= $preview['fare']['fare_source'] === 'manual' ? 'Manual' : 'Auto-computed' ?>
+                </span>
+              </td>
+            </tr>
             <?php if ($preview['note_to_rider'] !== ''): ?>
               <tr><th>Note to Rider</th><td><?= val($preview['note_to_rider']) ?></td></tr>
             <?php endif; ?>

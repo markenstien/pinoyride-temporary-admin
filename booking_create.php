@@ -26,11 +26,14 @@ $formErrors = [];
 $preview    = null;
 
 // Prefill for links in from elsewhere (e.g. nearby_drivers.php's "Book This
-// Rider" button, which passes the driver's mobile and the searched pickup
-// address). Only used on the initial GET load — once the form is POSTed,
+// Rider" button, and booking_check_fare.php's "Create Booking" button, both
+// of which pass along a driver mobile/pickup address already looked up
+// there). Only used on the initial GET load — once the form is POSTed,
 // $_POST values take over via the same field names below.
 $prefillDriverMobile = trim($_GET['driver_mobile'] ?? '');
 $prefillPickupAddress = trim($_GET['pickup_address'] ?? '');
+$prefillDropoffAddress = trim($_GET['dropoff_address'] ?? '');
+$prefillFare = trim($_GET['fare'] ?? '');
 
 function split_name(string $name): array
 {
@@ -457,13 +460,13 @@ require __DIR__ . '/includes/header.php';
             </div>
             <div class="col-12">
               <label class="form-label">Dropoff Address *</label>
-              <input type="text" name="dropoff_address" class="form-control" value="<?= htmlspecialchars($_POST['dropoff_address'] ?? '') ?>" required>
+              <input type="text" name="dropoff_address" class="form-control" value="<?= htmlspecialchars($_POST['dropoff_address'] ?? $prefillDropoffAddress) ?>" required>
             </div>
             <div class="col-md-6">
               <label class="form-label">Fare</label>
               <div class="input-group">
                 <span class="input-group-text">₱</span>
-                <input type="number" step="0.01" min="0" name="fare" class="form-control" placeholder="Leave blank to auto-compute" value="<?= htmlspecialchars($_POST['fare'] ?? '') ?>">
+                <input type="number" step="0.01" min="0" name="fare" class="form-control" placeholder="Leave blank to auto-compute" value="<?= htmlspecialchars($_POST['fare'] ?? $prefillFare) ?>">
               </div>
               <div class="form-text">Leave blank to auto-compute from route distance (shown next screen either way).</div>
             </div>

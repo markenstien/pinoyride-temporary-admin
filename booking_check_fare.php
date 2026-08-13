@@ -112,37 +112,42 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                     if($driverNumber[1]) {
                         $rider = find_rider_by_mobile($pdo, $driverNumber[0]);
 
-                        $driverRoute = distance_matrix($pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
-                        $riderLat = $rider['current_lat'] !== null && $rider['current_lat'] !== '' ? (float)$rider['current_lat'] : null;
-                        $riderLng = $rider['current_long'] !== null && $rider['current_long'] !== '' ? (float)$rider['current_long'] : null;
-                        
-                        if ($riderLat === null || $riderLng === null) {
-                            $riderEtaUnavailableReason = 'Driver has no location on file.';
-                        } else {
-                            $riderRoute = distance_matrix($riderLat, $riderLng, $pickupLat, $pickupLng);
-                            if ($riderRoute) {
-                                $riderEtaText = $riderRoute['duration_text'];
-                                $riderDistanceKm = $riderRoute['distance_km'];
+                        // Only build driver info (and offer "Create Booking")
+                        // when a driver actually exists for that number —
+                        // previously this ran even on a miss, producing a
+                        // blank-name/blank-mobile "driver" card.
+                        if ($rider) {
+                            $riderLat = $rider['current_lat'] !== null && $rider['current_lat'] !== '' ? (float)$rider['current_lat'] : null;
+                            $riderLng = $rider['current_long'] !== null && $rider['current_long'] !== '' ? (float)$rider['current_long'] : null;
+
+                            if ($riderLat === null || $riderLng === null) {
+                                $riderEtaUnavailableReason = 'Driver has no location on file.';
                             } else {
-                                $riderDistanceKm = haversine_km($riderLat, $riderLng, $pickupLat, $pickupLng);
-                                $riderAssumedSpeedKmh = 25.0;
-                                $riderEtaMinutes = ($riderDistanceKm / $riderAssumedSpeedKmh) * 60;
-                                $riderEtaText = round($riderEtaMinutes) . ' min';
-                                $riderEtaApprox = true;
+                                $riderRoute = distance_matrix($riderLat, $riderLng, $pickupLat, $pickupLng);
+                                if ($riderRoute) {
+                                    $riderEtaText = $riderRoute['duration_text'];
+                                    $riderDistanceKm = $riderRoute['distance_km'];
+                                } else {
+                                    $riderDistanceKm = haversine_km($riderLat, $riderLng, $pickupLat, $pickupLng);
+                                    $riderAssumedSpeedKmh = 25.0;
+                                    $riderEtaMinutes = ($riderDistanceKm / $riderAssumedSpeedKmh) * 60;
+                                    $riderEtaText = round($riderEtaMinutes) . ' min';
+                                    $riderEtaApprox = true;
+                                }
                             }
+
+                            $driverData = [
+                                'name' => trim($rider['first_name'] . ' ' . $rider['last_name']),
+                                'mobileNumber' => $rider['mobile_no'],
+                                'riderEtaUnavailableReason' => $riderEtaUnavailableReason ?? '',
+                                'riderEtaMinutes' => $riderEtaMinutes ?? null,
+                                'distance_km' => round($riderDistanceKm ?? 0.0, 2),
+                                'riderEtaText' => $riderEtaText ?? null,
+                                'riderEtaApprox' => $riderEtaApprox ?? null
+                            ];
+                        } else {
+                            $driverNotFound = true;
                         }
-
-
-                        $driverData = [
-                            'name' => $rider['first_name'] . ' ' . $rider['last_name'],
-                            'mobileNumber' => $rider['mobile_no'],
-                            'riderEtaUnavailableReason' => $riderEtaUnavailableReason ?? '',
-                            'riderEtaRoute' => $riderEtaRoute ?? null,
-                            'riderEtaMinutes' => $riderEtaMinutes ?? null,
-                            'distance_km' => round($riderDistanceKm, 2),
-                            'riderEtaText' => $riderEtaText ?? null,
-                            'riderEtaApprox' => $riderEtaApprox ?? null
-                        ];
                     }
 
                 }
@@ -168,7 +173,8 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                     'eta_unavailable_reason' => '',
                     'fare'                 => $fare,
 
-                    'driver' => $driverData ?? null
+                    'driver' => $driverData ?? null,
+                    'driver_not_found' => $driverNotFound ?? false
                 ];
 
                 $mode = 'view_fare';
@@ -280,6 +286,10 @@ require __DIR__ . '/includes/header.php';
                 </div>
             </div>
 
+            <?php if($preview['driver_not_found']) :?>
+                <div class="alert alert-warning py-2">No driver found with that mobile number.</div>
+            <?php endif; ?>
+
             <?php if($preview['driver'] != null) :?>
                 <div class="card mb-3">
                     <div class="card-header bg-white fw-semibold">Driver</div>
@@ -339,6 +349,14 @@ require __DIR__ . '/includes/header.php';
             </div>
 
             <div class="col-12 d-flex gap-2 mt-4">
+                <?php if($preview['driver'] != null): ?>
+                    <a href="booking_create.php?<?= http_build_query([
+                        'driver_mobile'   => $preview['driver']['mobileNumber'],
+                        'pickup_address'  => $preview['pickup_address'],
+                        'dropoff_address' => $preview['dropoff_address'],
+                        'fare'            => $preview['fare']['total_amount'],
+                    ]) ?>" class="btn btn-success">Create Booking</a>
+                <?php endif; ?>
                 <a href="booking_check_fare.php" class="btn btn-outline-secondary">Done</a>
             </div>
         </div>

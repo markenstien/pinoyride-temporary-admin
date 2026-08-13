@@ -3,11 +3,63 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/booking_status.php';
+require_once __DIR__ . '/includes/customer_ingest.php';
 
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $booking = null;
 $errorMsg = '';
 $statusUpdateErrorMsg = '';
+$assignRiderErrorMsg = '';
+
+// Manual driver assignment: the booking is still "Looking for Driver" (no
+// broadcast match yet) but the admin has already lined up a driver outside
+// the app (e.g. by phone) and just needs to attach them to the booking.
+// Looked up by mobile number only — same normalization rule as
+// booking_create.php's find_rider_by_mobile. Moves the booking straight to
+// Accepted by Driver, mirroring what a normal broadcast-accept would do.
+if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['assign_rider_mobile'])) {
+    [$driverMobile, $driverMobileRecognized] = normalize_mobile_to_63(trim($_POST['assign_rider_mobile']));
+
+    if ($driverMobile === '' || !$driverMobileRecognized) {
+        $assignRiderErrorMsg = 'Enter a valid driver mobile number.';
+    } else {
+        try {
+            $pdo = get_pdo();
+
+            $riderStmt = $pdo->prepare(
+                "SELECT id FROM public.riders WHERE mobile_no = :mobile AND deleted_at IS NULL LIMIT 1"
+            );
+            $riderStmt->execute([':mobile' => $driverMobile]);
+            $riderId = $riderStmt->fetchColumn();
+
+            if ($riderId === false) {
+                $assignRiderErrorMsg = 'No driver found with that mobile number.';
+            } else {
+                // Re-checked here (status = 0) so a stale page can't attach a
+                // driver to a booking that has since moved on.
+                $assignStmt = $pdo->prepare(
+                    "UPDATE public.booking
+                     SET rider_id = :rider_id,
+                         status = 1,
+                         updated_at = NOW()
+                     WHERE id = :id
+                       AND status = 0
+                     RETURNING id"
+                );
+                $assignStmt->execute([':rider_id' => (int)$riderId, ':id' => $id]);
+
+                if (!$assignStmt->fetch()) {
+                    $assignRiderErrorMsg = 'Rider was not assigned — the booking may no longer be Looking for Driver. Refresh and try again.';
+                } else {
+                    header('Location: booking_show.php?id=' . $id . '&rider_assigned=1');
+                    exit;
+                }
+            }
+        } catch (PDOException $e) {
+            $assignRiderErrorMsg = 'Rider assignment failed: ' . $e->getMessage();
+        }
+    }
+}
 
 if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_status'])) {
     $newStatus = (int)$_POST['new_status'];
@@ -223,6 +275,9 @@ require __DIR__ . '/includes/header.php';
   <?php if (($_GET['status_updated'] ?? '') === '1'): ?>
     <div class="alert alert-success">Booking status updated successfully.</div>
   <?php endif; ?>
+  <?php if (($_GET['rider_assigned'] ?? '') === '1'): ?>
+    <div class="alert alert-success">Rider assigned successfully.</div>
+  <?php endif; ?>
   <?php if ($statusUpdateErrorMsg !== ''): ?>
     <div class="alert alert-danger"><?= htmlspecialchars($statusUpdateErrorMsg) ?></div>
   <?php endif; ?>
@@ -247,6 +302,36 @@ require __DIR__ . '/includes/header.php';
             </button>
           </form>
         <?php endforeach; ?>
+      </div>
+    </div>
+  <?php endif; ?>
+
+  <?php if ((int)$booking['status'] === 0 && !$booking['rider_id']): ?>
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+        <span>Already Found a Rider?</span>
+        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#assignRiderForm">
+          Add Rider
+        </button>
+      </div>
+      <div class="collapse<?= $assignRiderErrorMsg !== '' ? ' show' : '' ?>" id="assignRiderForm">
+        <div class="card-body">
+          <?php if ($assignRiderErrorMsg !== ''): ?>
+            <div class="alert alert-danger py-2 mb-2"><?= htmlspecialchars($assignRiderErrorMsg) ?></div>
+          <?php endif; ?>
+          <form method="post" class="row gx-2 gy-2 align-items-end"
+                onsubmit="return confirm('Assign this driver to the booking and mark it Accepted by Driver?');">
+            <input type="hidden" name="id" value="<?= (int)$id ?>">
+            <div class="col-auto">
+              <label class="form-label mb-0">Driver Mobile Number</label>
+              <input type="text" name="assign_rider_mobile" class="form-control form-control-sm"
+                     placeholder="09xxxxxxxxx" value="<?= htmlspecialchars($_POST['assign_rider_mobile'] ?? '') ?>" required>
+            </div>
+            <div class="col-auto">
+              <button type="submit" class="btn btn-sm btn-primary">Assign Rider</button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   <?php endif; ?>
