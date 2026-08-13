@@ -359,6 +359,11 @@ require __DIR__ . '/includes/header.php';
                         'fare'            => $preview['fare']['total_amount'],
                     ]) ?>" class="btn btn-success">Create Booking</a>
                 <?php endif; ?>
+                <a href="post_booking_create.php?<?= http_build_query([
+                    'pickup_address'  => $preview['pickup_address'],
+                    'dropoff_address' => $preview['dropoff_address'],
+                    'fare'            => $preview['fare']['total_amount'],
+                ]) ?>" class="btn btn-outline-success">Post Booking</a>
                 <a href="booking_check_fare.php" class="btn btn-outline-secondary">Done</a>
             </div>
         </div>

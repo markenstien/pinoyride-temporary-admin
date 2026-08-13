@@ -245,6 +245,11 @@ function fmt_money($v): string
     return ($v === null || $v === '') ? '—' : '₱' . number_format((float)$v, 2);
 }
 
+// Precomputed once here for reuse in the "Share Summary" modal below (the
+// Customer/Rider cards build these same strings inline where they're used).
+$customerName = $booking ? trim(($booking['customer_fname'] ?? '') . ' ' . ($booking['customer_mname'] ? $booking['customer_mname'] . ' ' : '') . ($booking['customer_lname'] ?? '')) : '';
+$riderName    = $booking ? trim(($booking['rider_fname'] ?? '') . ' ' . ($booking['rider_mname'] ? $booking['rider_mname'] . ' ' : '') . ($booking['rider_lname'] ?? '')) : '';
+
 function fmt_json($v): string
 {
     if ($v === null || $v === '') {
@@ -346,35 +351,23 @@ require __DIR__ . '/includes/header.php';
     <!-- Trip details -->
     <div class="col-lg-6">
       <div class="card h-100">
-        <div class="card-header bg-white fw-semibold">Trip Details</div>
+        <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+          <span>Trip Details</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#shareSummaryModal">
+            Share Summary
+          </button>
+        </div>
         <div class="card-body">
           <table class="table table-sm mb-0">
             <tr><th style="width:40%">Ref Code</th><td><?= val($booking['ref_code']) ?></td></tr>
             <tr><th>Booking Type</th><td><?= val($booking['booking_type']) ?></td></tr>
             <tr><th>Status</th><td><span class="badge <?= booking_status_badge_class($booking['status']) ?>"><?= htmlspecialchars(booking_status_label($booking['status'])) ?></span></td></tr>
             <tr><th>Payment Method</th><td><?= val($booking['payment_type']) ?></td></tr>
-            <tr><th>Distance (km)</th><td><?= val($booking['distance_km']) ?></td></tr>
             <tr><th>Pickup Location</th><td><?= val($booking['pickup_location']) ?></td></tr>
-            <tr><th>Pickup Coordinates</th>
-              <td>
-                <?php if ($booking['pickup_lat'] && $booking['pickup_long']): ?>
-                  <a href="https://www.google.com/maps?q=<?= urlencode($booking['pickup_lat'] . ',' . $booking['pickup_long']) ?>" target="_blank" rel="noopener">
-                    <?= val($booking['pickup_lat']) ?>, <?= val($booking['pickup_long']) ?>
-                  </a>
-                <?php else: ?>—<?php endif; ?>
-              </td>
-            </tr>
             <tr><th>Dropoff Location</th><td><?= val($booking['dropoff_location']) ?></td></tr>
-            <tr><th>Dropoff Coordinates</th>
-              <td>
-                <?php if ($booking['dropoff_lat'] && $booking['dropoff_long']): ?>
-                  <a href="https://www.google.com/maps?q=<?= urlencode($booking['dropoff_lat'] . ',' . $booking['dropoff_long']) ?>" target="_blank" rel="noopener">
-                    <?= val($booking['dropoff_lat']) ?>, <?= val($booking['dropoff_long']) ?>
-                  </a>
-                <?php else: ?>—<?php endif; ?>
-              </td>
-            </tr>
             <tr><th>Note to Rider</th><td><?= val($booking['note_to_rider']) ?></td></tr>
+            <tr><th>Distance (km)</th><td><?= val($booking['distance_km']) ?></td></tr>
+            <tr><th>Cost : <td><?= fmt_money($booking['payment_total_amount']) ?></td></th></tr>
           </table>
         </div>
       </div>
@@ -479,6 +472,38 @@ require __DIR__ . '/includes/header.php';
       </div>
     </div>
 
+  </div>
+
+  <!-- Share Summary: screenshot-friendly booking card for sending to the customer/passenger -->
+  <div class="modal fade" id="shareSummaryModal" tabindex="-1" aria-labelledby="shareSummaryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="shareSummaryModalLabel">Booking Summary</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="p-3 border rounded bg-white">
+            <div class="text-center mb-3">
+              <div class="fw-bold fs-4 text-primary">PinoyRide</div>
+              <div class="text-muted small">Trip Confirmation</div>
+            </div>
+            <table class="table table-sm mb-0">
+              <tr><th style="width:40%">Reference Code</th><td><?= val($booking['ref_code']) ?></td></tr>
+              <tr><th>Status</th><td><span class="badge <?= booking_trip_status_badge_class($booking['status']) ?>"><?= htmlspecialchars(booking_trip_status_label($booking['status'])) ?></span></td></tr>
+              <tr><th>Pickup</th><td><?= val($booking['pickup_location']) ?></td></tr>
+              <tr><th>Dropoff</th><td><?= val($booking['dropoff_location']) ?></td></tr>
+              <tr><th>Driver</th><td><?= val($riderName !== '' ? $riderName : null) ?></td></tr>
+              <tr><th>Customer</th><td><?= val($customerName !== '' ? $customerName : null) ?></td></tr>
+              <tr><th>Note to Rider</th><td><?= val($booking['note_to_rider']) ?></td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 
 <?php endif; ?>

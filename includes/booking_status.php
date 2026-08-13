@@ -49,3 +49,33 @@ function booking_type_label($type): string
     $type = (int)$type;
     return BOOKING_TYPES[$type] ?? ('Unknown (' . $type . ')');
 }
+
+// Simplified, customer-facing status wording for booking_show.php's "Share
+// Summary" card (screenshotted and sent to the passenger) — collapses
+// Accepted by Driver / In Transit into a single "On-Going", distinct from
+// the admin-facing BOOKING_STATUSES labels used everywhere else.
+const BOOKING_TRIP_STATUSES = [
+    0 => 'Pending',
+    1 => 'On-Going',
+    2 => 'On-Going',
+    3 => 'Completed',
+    4 => 'Cancelled',
+];
+
+function booking_trip_status_label($status): string
+{
+    $status = (int)$status;
+    return BOOKING_TRIP_STATUSES[$status] ?? ('Unknown (' . $status . ')');
+}
+
+function booking_trip_status_badge_class($status): string
+{
+    switch ((int)$status) {
+        case 0: return 'bg-secondary';
+        case 1:
+        case 2: return 'bg-info text-dark';
+        case 3: return 'bg-success';
+        case 4: return 'bg-danger';
+        default: return 'bg-dark';
+    }
+}

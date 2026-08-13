@@ -32,6 +32,14 @@ $errorMsg   = '';
 $formErrors = [];
 $preview    = null;
 
+// Prefill for links in from elsewhere (e.g. booking_check_fare.php's "Post
+// Booking" button, which passes along the pickup/dropoff addresses and fare
+// already checked there). Only used on the initial GET load — once the form
+// is POSTed, $_POST values take over via the same field names below.
+$prefillPickupAddress = trim($_GET['pickup_address'] ?? '');
+$prefillDropoffAddress = trim($_GET['dropoff_address'] ?? '');
+$prefillFare = trim($_GET['fare'] ?? '');
+
 function split_name(string $name): array
 {
     $name = trim(preg_replace('/\s+/', ' ', $name) ?? '');
@@ -439,11 +447,11 @@ require __DIR__ . '/includes/header.php';
             <div class="col-12 mt-4"><h6 class="text-muted mb-0">Booking Details</h6></div>
             <div class="col-12">
               <label class="form-label">Pick Up *</label>
-              <input type="text" name="pickup_address" class="form-control" value="<?= htmlspecialchars($_POST['pickup_address'] ?? '') ?>" required>
+              <input type="text" name="pickup_address" class="form-control" value="<?= htmlspecialchars($_POST['pickup_address'] ?? $prefillPickupAddress) ?>" required>
             </div>
             <div class="col-12">
               <label class="form-label">Drop Off *</label>
-              <input type="text" name="dropoff_address" class="form-control" value="<?= htmlspecialchars($_POST['dropoff_address'] ?? '') ?>" required>
+              <input type="text" name="dropoff_address" class="form-control" value="<?= htmlspecialchars($_POST['dropoff_address'] ?? $prefillDropoffAddress) ?>" required>
             </div>
             <div class="col-md-6">
               <label class="form-label">Vehicle Type</label>
@@ -457,7 +465,7 @@ require __DIR__ . '/includes/header.php';
               <label class="form-label">Fare</label>
               <div class="input-group">
                 <span class="input-group-text">₱</span>
-                <input type="number" step="0.01" min="0" name="fare" class="form-control" placeholder="Leave blank to auto-compute" value="<?= htmlspecialchars($_POST['fare'] ?? '') ?>">
+                <input type="number" step="0.01" min="0" name="fare" class="form-control" placeholder="Leave blank to auto-compute" value="<?= htmlspecialchars($_POST['fare'] ?? $prefillFare) ?>">
               </div>
               <div class="form-text">Leave blank to auto-compute from route distance (shown next screen either way).</div>
             </div>
