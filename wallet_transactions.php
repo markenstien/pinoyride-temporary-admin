@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+$tabTitle = 'Wallet Transactions';
 
 $walletId = (int)($_GET['wallet_id'] ?? 0);
 $wallet   = null;

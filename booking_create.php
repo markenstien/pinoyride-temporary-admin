@@ -6,6 +6,8 @@ require_once __DIR__ . '/includes/customer_ingest.php';
 require_once __DIR__ . '/includes/geocoding.php';
 require_once __DIR__ . '/includes/fare.php';
 
+$tabTitle = 'Create Booking';
+
 // Manual/phone-dispatch booking creation: admin already has a passenger and
 // a specific driver on the line. Passenger is looked up by mobile and
 // created if new (reusing the same logic as customer_create.php); driver

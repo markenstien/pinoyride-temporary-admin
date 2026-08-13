@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+$tabTitle = 'Booking Analysis';
 
 // ---------------------------------------------------------------
 // Read & sanitize filter inputs (GET, so results are bookmarkable)

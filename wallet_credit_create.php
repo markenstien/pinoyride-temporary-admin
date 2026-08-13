@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+$tabTitle = 'Add Credit';
 
 $walletId = (int)($_GET['wallet_id'] ?? $_POST['wallet_id'] ?? 0);
 $riderId  = (int)($_GET['rider_id'] ?? $_POST['rider_id'] ?? 0);

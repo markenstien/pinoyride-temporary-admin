@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/geocoding.php';
-
+$tabTitle = 'Nearby Drivers';
 // Admin types a pickup address, we geocode it and list active (status=1)
 // drivers whose last known location (current_lat/current_long) is within
 // NEARBY_RADIUS_KM straight-line distance. "Online only" is checked by

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/booking_status.php';
-
+$tabTitle = 'Commissions';
 // ---------------------------------------------------------------
 // Read & sanitize filter inputs (GET, so results are bookmarkable)
 // ---------------------------------------------------------------

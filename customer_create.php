@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/customer_ingest.php';
+$tabTitle = 'Add Passenger';
 
 // Same shape as import_customer.php's CSV pipeline (upload -> preview ->
 // confirm) but for a single manually-typed record, sharing the same field

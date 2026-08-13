@@ -6,6 +6,8 @@ require_once __DIR__ . '/includes/customer_ingest.php';
 require_once __DIR__ . '/includes/geocoding.php';
 require_once __DIR__ . '/includes/fare.php';
 
+$tabTitle = 'Post Booking';
+
 // "Post a booking" creation: admin has a passenger on the line but no
 // specific driver — the booking is posted unassigned (status 0, Looking for
 // Driver, rider_id NULL) so any online driver can find and accept it, same
