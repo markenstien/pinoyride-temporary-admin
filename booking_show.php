@@ -493,6 +493,8 @@ require __DIR__ . '/includes/header.php';
               <tr><th>Status</th><td><span class="badge <?= booking_trip_status_badge_class($booking['status']) ?>"><?= htmlspecialchars(booking_trip_status_label($booking['status'])) ?></span></td></tr>
               <tr><th>Pickup</th><td><?= val($booking['pickup_location']) ?></td></tr>
               <tr><th>Dropoff</th><td><?= val($booking['dropoff_location']) ?></td></tr>
+              <tr><th>Distance</th><td><?= $booking['distance_km'] !== null && $booking['distance_km'] !== '' ? val($booking['distance_km']) . ' km' : '—' ?></td></tr>
+              <tr><th>Cost</th><td><?= fmt_money($booking['payment_total_amount']) ?></td></tr>
               <tr><th>Driver</th><td><?= val($riderName !== '' ? $riderName : null) ?></td></tr>
               <tr><th>Customer</th><td><?= val($customerName !== '' ? $customerName : null) ?></td></tr>
               <tr><th>Note to Rider</th><td><?= val($booking['note_to_rider']) ?></td></tr>
